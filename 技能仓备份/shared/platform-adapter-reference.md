@@ -3,11 +3,11 @@
 > **文件定位**：本文件为 `../platform-adapter-reference.md` 的只读镜像，用于兼容历史引用。
 >
 > **单一事实源**：`../platform-adapter-reference.md`。任何修改请先修改 SOT 文件，再同步更新本镜像。
-本文件用于让 QoderWork 与 Codex 共用同一套技能正文。技能正文应优先描述“动作”，避免写死平台工具名。
+本文件用于让 Qoder 与 Codex 共用同一套技能正文。技能正文应优先描述“动作”，避免写死平台工具名。
 
 ## 动作映射
 
-| 平台无关动作 | QoderWork 常见工具 | Codex 常见工具/做法 |
+| 平台无关动作 | Qoder 常见工具 | Codex 常见工具/做法 |
 |---|---|---|
 | 列出技能文件 | Glob | PowerShell `Get-ChildItem` 或 `rg --files` |
 | 读取技能文件 | Read | `Get-Content`、文件读取工具 |

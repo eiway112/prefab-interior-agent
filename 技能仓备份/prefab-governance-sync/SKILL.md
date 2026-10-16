@@ -8,13 +8,13 @@ version: 1.2.2
 
 ## 定位
 
-装配式装修技能合集治理文件的**执行层同步流水线**（薄技能）：只管"怎么同步、怎么验收"。变更定级（S/A/B/C）、审批流程、专项规则的唯一事实源是 `change-governance.md`（项目仓 `_专题_技能合集策划/` 与 `shared/` 各一份，须保持同步）。
+装配式装修技能合集治理文件的**执行层同步流水线**（薄技能）：只管"怎么同步、怎么验收"。变更定级（S/A/B/C）、审批流程、专项规则的唯一事实源是 `change-governance.md`（项目仓 `治理文件/` 与 `shared/` 各一份，须保持同步）。
 
 ## 三层结构与文件映射
 
 | 层 | 路径 | 角色 |
 |---|---|---|
-| L1 开发源 | 项目仓根目录下的 `_专题_技能合集策划\`（本仓 `_专题_技能合集策划/`） | 治理文件开发源；各 `_专题_*` 目录存子技能策划稿 |
+| L1 开发源 | 项目仓根目录下的 `治理文件/`（本仓 `治理文件/`） | 治理文件开发源；各 `治理文件` 目录存子技能策划稿 |
 | L2 运行时 SOT | `~/.qoder/skills/` | standards-index.md（根 SOT，头部含 SOT 声明+镜像说明）+ 各 prefab-*/skill-qa-tester 技能目录 |
 | L3 只读镜像 | `~/.qoder/skills/shared/` | change-governance、data-classification（2026-09-22 数据分类迁移批新增）、glossary、interface-contracts、platform-adapter-reference、redlines-registry、standards-index、standards-reasoning-rules（头部为 shared 路径定位措辞） |
 

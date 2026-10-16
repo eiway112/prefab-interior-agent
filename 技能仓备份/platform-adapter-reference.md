@@ -1,13 +1,13 @@
 # 双平台动作适配说明
 
-> **文件定位**：本文件为双平台动作适配说明的单一事实源（SOT）。优先使用本文件作为平台无关动作到 QoderWork/Codex 工具的映射参考。
+> **文件定位**：本文件为双平台动作适配说明的单一事实源（SOT）。优先使用本文件作为平台无关动作到 Qoder/Codex 工具的映射参考。
 >
 > **镜像说明**：`shared/platform-adapter-reference.md` 是本文件的只读镜像，用于兼容 `prefab-partition-wall-solution` 等历史引用。修改请以本文件为准，并同步更新镜像。
-本文件用于让 QoderWork 与 Codex 共用同一套技能正文。技能正文应优先描述“动作”，避免写死平台工具名。
+本文件用于让 Qoder 与 Codex 共用同一套技能正文。技能正文应优先描述“动作”，避免写死平台工具名。
 
 ## 动作映射
 
-| 平台无关动作 | QoderWork 常见工具 | Codex 常见工具/做法 |
+| 平台无关动作 | Qoder 常见工具 | Codex 常见工具/做法 |
 |---|---|---|
 | 列出技能文件 | Glob | PowerShell `Get-ChildItem` 或 `rg --files` |
 | 读取技能文件 | Read | `Get-Content`、文件读取工具 |

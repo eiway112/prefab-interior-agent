@@ -14,7 +14,7 @@ tearDown 回滚）＋一支跨载体字面对撞（代码常量 == standards-rea
 覆盖：M1 分类协议、M3 场景推理（含项目类型类比归一）与 Step 1a 裁定、M4 适用性裁判、M6 降级、
       IC-10 Response v1.9.0 Schema、SR 引擎化红线，
       以及 SRE 确定性体检行为组 T-B1—T-B7 + A5-B 锚定升档
-      （判据源《文档/SRE确定性体检设计方案_v1.0.md》§3.2 / §4.3 / §5.2 / §6.2）。
+      （判据源《文档目录/SRE确定性体检设计方案_v1.0.md》§3.2 / §4.3 / §5.2 / §6.2）。
 """
 
 from __future__ import annotations
@@ -1004,7 +1004,7 @@ class _SREDeterminismBase(unittest.TestCase):
 class TestSREDeterminismStatic(_SREDeterminismBase):
     """SRE 确定性体检·行为组（静态可测子集）T-B1 / T-B3 / T-B4 / T-B7。
 
-    判据源《文档/SRE确定性体检设计方案_v1.0.md》§3.2。**自退役规则（§6.2）**：用例转成
+    判据源《文档目录/SRE确定性体检设计方案_v1.0.md》§3.2。**自退役规则（§6.2）**：用例转成
     unexpected success 即说明对应缺陷已由 `sre_reasoner.py` 真实修复——此时必须摘掉装饰器、
     把断言转为正向常态断言，**禁止回退或注释掉被测代码的修复来让用例重新"预期失败"**。
     unexpected success 会让 `wasSuccessful()` 返回 False、门禁 exit 1，这是设计意图而非故障。
@@ -1896,7 +1896,7 @@ def run_and_report() -> int:
           f"{previous_fingerprint or '（首轮，无历史）'}｜连续一致 {stable_streak} 轮"
           f"（§6.3.3 ① 需 ≥2）")
     print("范围说明：本 JSON 只承载载体 B 的行为组信号 T-B1—T-B7；静态组 T-A1—T-A5 由 "
-          "程序文件/validate_governance.py 检查 5 独立产出，两载体互不读取（设计方案 §4.1）。")
+          "维护脚本/validate_governance.py 检查 5 独立产出，两载体互不读取（设计方案 §4.1）。")
 
     if result.unexpectedSuccesses:
         print("⚠ 存在 unexpected success：对应缺陷已被修复。按设计方案 §6.2 须摘除该用例的 "
