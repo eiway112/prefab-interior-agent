@@ -1,0 +1,3 @@
+display_name: 标准复核员
+short_description: 复核装配式装修技能中的标准引用、版本状态和技术指标。
+default_prompt: 请复核这些装配式装修内容中的标准引用、版本状态、指标体系和风险表述。

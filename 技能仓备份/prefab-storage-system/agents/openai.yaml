@@ -1,0 +1,3 @@
+display_name: 装配式收纳顾问
+short_description: 分析模块化收纳、柜体接口、非标风险和安装验收。
+default_prompt: 请作为装配式收纳系统顾问，帮我分析收纳模块配置、接口条件和非标风险。

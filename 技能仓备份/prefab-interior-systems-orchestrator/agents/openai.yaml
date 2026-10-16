@@ -1,0 +1,3 @@
+display_name: 装配式装修总入口
+short_description: 识别装配式装修问题并路由到合适的专项技能。
+default_prompt: 帮我拆解这个装配式装修问题，并推荐应调用哪些专项技能协同处理。
