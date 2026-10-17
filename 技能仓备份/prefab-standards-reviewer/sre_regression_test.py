@@ -1,7 +1,15 @@
 """
 SRE Reasoner 回归测试集
 ========================
-版本：v1.11（2026-10-12：CG-20261012-006 项目类型类比归一守卫组 TestProjectTypeAnalogy 九例，70→79 例；
+版本：v1.12（2026-10-17：CG-20261017-006 台账 PL-200 裁定①「公寓按住宿期限分流（甲）」实施批——
+守卫组 TestProjectTypeAnalogy 由九例扩为十三例（79→84 例）。三支按「公寓→住宅」写死期望值的例
+同批改判（其中两支改名，旧名→新名映射见该组 docstring，映射不留第二处）：正向例改为
+「三枚高频场景非未命中＋族含 GB 55025-2022 且不含 GB 55038-2025」；相等例改为「公寓 body 相对
+住宅的差集只允许全文强制枚」；类比表牙例改为「撤两轴专用面回类比态／两支全撤才回未命中」。
+新增取数侧三例＝取序后缀（专用行优先）＋覆盖面（公寓行逐枚齐于住宅场景且域集相等）＋
+标注三件事逐件在场；跨载体逐字对撞例保留原判据（命中数须恰 1）。
+承接台账 PL-198 ②／PL-200 ③④——「公寓」自本版起走专用行，PROJECT_TYPE_ANALOGIES 退役为兜底）
+      v1.11（2026-10-12：CG-20261012-006 项目类型类比归一守卫组 TestProjectTypeAnalogy 九例，70→79 例；
 承接台账 PL-198 ②——「公寓」经 PROJECT_TYPE_ANALOGIES 按住宅档进 M3 场景推理面；九例＝四正向
 ＋两支控制例（目标档不带标注／类比档未命中态仍判未命中）＋一支牙例（内存内撤类比表须回到未命中，
 tearDown 回滚）＋一支跨载体字面对撞（代码常量 == standards-reasoning-rules.md §3.2 注内逐字，恰一枚））
@@ -11,7 +19,7 @@ tearDown 回滚）＋一支跨载体字面对撞（代码常量 == standards-rea
 上一版 v1.9：2026-09-17 复查到期与标准效力／依据确定性解耦，59→66 例）
 运行：python sre_regression_test.py
 
-覆盖：M1 分类协议、M3 场景推理（含项目类型类比归一）与 Step 1a 裁定、M4 适用性裁判、M6 降级、
+覆盖：M1 分类协议、M3 场景推理（含项目类型分流与类比兜底）与 Step 1a 裁定、M4 适用性裁判、M6 降级、
       IC-10 Response v1.9.0 Schema、SR 引擎化红线，
       以及 SRE 确定性体检行为组 T-B1—T-B7 + A5-B 锚定升档
       （判据源《文档目录/SRE确定性体检设计方案_v1.0.md》§3.2 / §4.3 / §5.2 / §6.2）。
@@ -1737,19 +1745,33 @@ class TestNameSotPriority(unittest.TestCase):
 
 
 class TestProjectTypeAnalogy(unittest.TestCase):
-    """项目类型类比归一守卫（CG-20261012-006，台账 PL-198 ② 落地）。
+    """「公寓」分流守卫组（CG-20261012-006 上线项目类型类比归一；CG-20261017-006 按台账 PL-200
+    裁定①「甲」的实施批，改为「专用行优先＋类比兜底」，本组由九例扩为十三例）。
 
-    判据源＝`standards-reasoning-rules.md` §3.2 Step 1「项目类型类比归一」注；本组最后一例把
-    代码常量与该注内所引标注**跨载体逐字对撞**（判据与实现分居两载体而不互撞，即《条文存在≠
-    机制生效》与「手抄副本漂移」两族的复合形态）。
+    判据源＝`standards-reasoning-rules.md` §3.2 Step 1「项目类型分流与类比兜底」注＋Step 2 的 `公寓`
+    族行；末例把代码常量与该注内所引标注**跨载体逐字对撞**（判据与实现分居两载体而不互撞，即《条文
+    存在≠机制生效》与「手抄副本漂移」两族的复合形态）。
 
-    本组刻意同时含正向例、两支控制例与一支「撤类比表必复红」的牙例：只留正向例时，类比面被
-    整支删除后本组仍会全绿（公寓退回「场景未命中」而正向例的断言恰好仍真），那正是本仓反复
-    登记过的恒真空跑形态。
+    三支**改名例**的对应关系（旧名系 §11.2 PL-200 行 ③ 与 CG-20261017-005 行 ①—③ 的引用锚，故把
+    映射写在本 docstring 里而不另立第二份映射表；改名理由＝旧断言与分流后判据正相反，留旧名即用例名
+    与它实际断言的事互相打脸，属《载体自述字面》族）：
+      test_analog_type_hits_table_without_miss_degradation → test_dedicated_rows_hit_without_miss
+      test_analog_type_gets_target_family                  → test_apartment_gets_split_family
+      test_value_body_identical_to_target_type             → test_value_body_changed_only_by_the_mandatory_standard
+                                                           ＋ test_split_family_is_hotel_analogy_not_new_dorm
+                                                           （旧断言＝公寓与住宅逐枚相等，本批改判为
+                                                            「差集只允许全文强制枚」并另加一枚口径例）
+      test_clearing_analogy_table_restores_miss            → test_clearing_dedicated_rows_falls_back_to_analogy
+                                                           ＋ test_clearing_both_branches_restores_miss（换判据轴）
+    本组沿 CG-20261012-006 的形制同时含正向例、控制例与牙例，并新增两支**取数侧**断言（取序后缀／
+    覆盖面）：只留正向例时，「专用行根本没被消费」这一空跑形态抓不到——类比兜底会把「命中」与「带标注」
+    两向都顶绿（教训＝CG-20261017-002 ②：注入类用例挡不住空跑，须取数侧断言）。
     """
 
     ANALOG = "公寓"
     TARGET = "住宅"
+    # (一) 的三枚高频场景＝PL-200 行 ③ 逐字点名者
+    SPLIT_SCENES = ("分户墙", "分户楼板", "户内吊顶")
     # 与 sre_reasoner._load_standards_index() 的候选顺序同形制（运行时 shared 镜像为判据载体）
     _RULES_CANDIDATES = [
         SRE_SOURCE.parent.parent / "shared" / "standards-reasoning-rules.md",
@@ -1765,71 +1787,225 @@ class TestProjectTypeAnalogy(unittest.TestCase):
         return [e["置信度"] for e in resp["证据对象"] if e["证据类型"] == etype]
 
     @staticmethod
+    def _source(resp: dict, etype: str) -> list[str]:
+        return [e["规则来源"] for e in resp["证据对象"] if e["证据类型"] == etype]
+
+    @staticmethod
+    def _ids(resp: dict) -> list[str]:
+        return [s["标准编号"] for s in resp["适用标准集"]]
+
+    @staticmethod
     def _body(resp: dict) -> list[tuple]:
         return [(s["标准编号"], s["层级"], s["权限"], s["角色"],
                  s["地域适用性"], s["时间状态"]) for s in resp["适用标准集"]]
 
-    def test_analog_type_hits_table_without_miss_degradation(self):
-        """类比档须命中激活表，不得再走「场景未命中」最小集。"""
-        resp = reason(self.ANALOG, "分户墙", location="全国")
-        unc = resp.get("未覆盖领域", [])
-        self.assertFalse(any("场景未命中" in u for u in unc),
-                         f"{self.ANALOG}|分户墙 仍判未命中：{unc}")
+    def _drop_dedicated(self):
+        """内存内撤掉「公寓」的**两轴**专用面（Step 1 激活行＋Step 2 专用族），返回回滚闭包。
 
-    def test_analog_type_gets_target_family(self):
-        """类比档取目标档的标准族（住宅分户墙判据 GB 55038-2025 须在场）。"""
-        resp = reason(self.ANALOG, "分户墙", location="全国")
-        self.assertIn("GB 55038-2025", [s["标准编号"] for s in resp["适用标准集"]],
-                      "公寓|分户墙 未取到住宅档标准族")
+        两轴必须一起撤：只撤激活行时，取族侧仍命中 `DOMAINS[*]["公寓"]`（两表各自独立），
+        此时"回到类比态"只在 Step 1 成立而 Step 2 不成立——那是一格混合态，不是本例要断的形态。"""
+        saved_table = dict(sre_reasoner.ACTIVATION_TABLE)
+        saved_domains = {d: dict(v) for d, v in sre_reasoner.DOMAINS.items()}
+        for k in [k for k in sre_reasoner.ACTIVATION_TABLE if k[0] == self.ANALOG]:
+            del sre_reasoner.ACTIVATION_TABLE[k]
+        for v in sre_reasoner.DOMAINS.values():
+            v.pop(self.ANALOG, None)
 
-    def test_analog_type_degrades_activation_and_mapping_confidence(self):
-        """两支降级须同批在场：activation 与经类比取族的 mapping 证据均不得留 deterministic。"""
+        def restore():
+            sre_reasoner.ACTIVATION_TABLE.clear()
+            sre_reasoner.ACTIVATION_TABLE.update(saved_table)
+            for d, v in saved_domains.items():
+                sre_reasoner.DOMAINS[d].clear()
+                sre_reasoner.DOMAINS[d].update(v)
+        return restore
+
+    # ── 正向例（验收判据 (一)(二)(三)(四)(六)）────────────────────────────
+    def test_dedicated_rows_hit_without_miss(self):
+        """(一) 三枚高频场景输出**非**「场景未命中」最小集。
+
+        这一条即 CG-20261017-004 现读二所防的功能回退，须作**正向**断言钉住：只写「不得回退」
+        在无守卫时不可机算。"""
+        for space in self.SPLIT_SCENES:
+            unc = reason(self.ANALOG, space, location="全国").get("未覆盖领域", [])
+            self.assertFalse(any("场景未命中" in u for u in unc),
+                             f"{self.ANALOG}|{space} 仍判未命中：{unc}")
+
+    def test_apartment_gets_split_family(self):
+        """(二) 标准族含 GB 55025-2022 且**不含** GB 55038-2025。
+
+        标准族成员是「按哪一档取值」的指纹：含 GB 55038-2025（该标准第1.0.2条限城镇住宅项目）
+        即说明实现仍走住宅类比，等于本枚判定没落地——比「检查是否分流」更能发现空跑。"""
+        for space in self.SPLIT_SCENES:
+            ids = self._ids(reason(self.ANALOG, space, location="全国"))
+            self.assertNotIn("GB 55038-2025", ids,
+                             f"{self.ANALOG}|{space} 仍取住宅专用限值标准（分流未落地）")
+        for space in ("分户墙", "分户楼板"):
+            ids = self._ids(reason(self.ANALOG, space, location="全国"))
+            self.assertIn("GB 55025-2022", ids,
+                          f"{self.ANALOG}|{space} 未取到全文强制归属枚 GB 55025-2022")
+
+    def test_split_family_is_hotel_analogy_not_new_dorm(self):
+        """分流两档在数值面**同取**旅馆档类比（台账 PL-089 终局口径），故公寓族须恰等于
+        「非住宅族 ∪ 全文强制归属枚」——既不得等于住宅族，也不得另立第三枚数。
+
+        本例同时是 PL-200 行 ⑤ 末句对 PL-054（隔声计算内核）那条硬约束的文档侧对撞面：
+        内核若另造一套宿舍档 dB 数，本例的「非住宅族＋一枚」等式即被打破。"""
+        for domain in ("acoustic", "acoustic(impact)"):
+            fam = sre_reasoner.DOMAINS[domain][self.ANALOG]
+            base = sre_reasoner.DOMAINS[domain]["默认"]
+            self.assertEqual(set(fam) - set(base), {"GB 55025-2022"},
+                             f"{domain} 的公寓族多出/少了非「旅馆档＋全文强制枚」的编号：{fam}")
+            self.assertEqual(set(base) - set(fam), set(),
+                             f"{domain} 的公寓族丢了旅馆档承载枚：缺 {sorted(set(base) - set(fam))}")
+            self.assertEqual(set(fam) & set(sre_reasoner.DOMAINS[domain][self.TARGET]), set(base),
+                             f"{domain} 的公寓族与住宅族的重叠面不等于旅馆档（住宅专用枚混入）")
+        self.assertEqual(sre_reasoner.DOMAINS["acoustic(贡献)"][self.ANALOG],
+                         sre_reasoner.DOMAINS["acoustic(贡献)"]["默认"],
+                         "贡献量归属未走旅馆档（吊顶场景经专用行取族时会另生一档）")
+
+    def test_dedicated_row_precedes_analogy_branch(self):
+        """(六) 前一支＝专用行须优先于类比支生效。键解析取序现读＝精确 → 空间别名 → 项目类比 →
+        两轴同归一，类比恒居后。两态同判 inferred，故置信度不可作判据，须取 规则来源 后缀。"""
+        src = self._source(reason(self.ANALOG, "分户墙", location="全国"), "activation")
+        self.assertEqual(len(src), 1, f"activation 证据 {len(src)} 枚（须恰 1，多枚即两支混判）")
+        self.assertIn("专用行", src[0], f"本次未走专用行：{src[0]}")
+        self.assertNotIn("类比兜底", src[0], f"专用行在场却报类比兜底＝取序判据失真：{src[0]}")
+
+    def test_apartment_degrades_activation_and_mapping_confidence(self):
+        """(四) 两支降级须同批在场：activation 与经专用行取族的 mapping 证据均不得留 deterministic。
+
+        判据轴自 CG-20261017-006 起＝「该类型的适用关系是否系参考级」，与本次走专用行还是类比兜底
+        无关；若仍钉在类比支上，则专用行落地当天该降级支即被挤成空跑。"""
         resp = reason(self.ANALOG, "分户墙", location="全国")
         act = self._conf(resp, "activation")
-        self.assertEqual(act, ["inferred"], f"activation 证据置信度未随类比改判：{act}")
+        self.assertEqual(act, ["inferred"], f"activation 证据置信度未随分流改判：{act}")
         self.assertIn("inferred", self._conf(resp, "mapping"),
-                      "经类比取族的 mapping 证据仍全 deterministic")
+                      "经专用行取族的 mapping 证据仍全 deterministic")
         self.assertTrue(any(e["证据类型"] == "degradation"
                             and self._notice() in e["输出结论"] for e in resp["证据对象"]),
                         "缺与可见面同字的 degradation 证据（内部痕迹与对外输出不同向）")
 
-    def test_analog_notice_visible_in_uncovered(self):
-        """标注须落「未覆盖领域」可见面（断点4 口径：证据里的 inferred 使用者读不到）。"""
+    def test_split_notice_visible_in_uncovered(self):
+        """(三) 之一：标注须落「未覆盖领域」可见面（断点4 口径：证据里的 inferred 使用者读不到）。"""
         resp = reason(self.ANALOG, "分户墙", location="全国")
         self.assertIn(self._notice(), resp.get("未覆盖领域", []),
-                      "类比标注未落可见面")
+                      "分流标注未落可见面")
 
-    def test_value_body_identical_to_target_type(self):
-        """类比只改确定性与标注，**不改取值本体**：条目六字段须与目标档逐枚相等。"""
-        a = self._body(reason(self.ANALOG, "分户墙", location="全国"))
-        b = self._body(reason(self.TARGET, "分户墙", location="全国"))
-        self.assertEqual(a, b, "类比档与目标档的适用标准集取值不等（本批声明只降确定性）")
+    def test_split_notice_carries_three_facts(self):
+        """(三) 之二：标注须同写明三件事，**缺一即属失实**（判据＝PL-200 行 ②）。
 
+        本例防的不是标注缺席（那由上一例挡），而是标注在场却被改写得失实——例如把「数值系旅馆档
+        类比」省掉，读者即会把分流档读成宿舍专用限值档。"""
+        notice = self._notice()
+        for fact, literal in (
+            ("(i) 依据系参考级", "参考级"),
+            ("(i) 依据载体", "起草说明"),
+            ("(ii) 宿舍档无专用数值档", "宿舍档在本合集无专用数值档"),
+            ("(ii) 数值系旅馆档类比", "GB 50118-2010 旅馆档类比"),
+            ("(iii) 归属须人工确认", "须由规划许可／设计文件人工确认"),
+            ("(iii) 不新增建筑定性入参", "不新增建筑定性入参"),
+        ):
+            self.assertIn(literal, notice, f"标注缺 {fact}，缺项字面＝{literal}")
+
+    def test_apartment_rows_cover_every_residential_scene(self):
+        """公寓行须逐枚覆盖住宅侧全部场景，且域集与住宅同场景同值。
+
+        取数侧断言（非注入例）：类比兜底只救「两档同场景」那一格，缺枚即在该格静默退回住宅档——
+        门禁全绿而取值本体已漂移，是本仓最难发现的一型。域集相等则钉住「分流只改分类归一与称谓、
+        不改激活域集」这条本批声明。"""
+        res = {k[1] for k in sre_reasoner.ACTIVATION_TABLE if k[0] == self.TARGET}
+        apt = {k[1] for k in sre_reasoner.ACTIVATION_TABLE if k[0] == self.ANALOG}
+        self.assertTrue(res, "住宅侧场景集现读为空，本例失主语")
+        self.assertEqual(res - apt, set(), f"「公寓」缺这些住宅同名场景行：{sorted(res - apt)}")
+        for space in sorted(res & apt):
+            self.assertEqual(sre_reasoner.ACTIVATION_TABLE[(self.ANALOG, space)],
+                             sre_reasoner.ACTIVATION_TABLE[(self.TARGET, space)],
+                             f"公寓|{space} 的激活域集与住宅不等")
+
+    # ── 控制例（防标注面恒真／防两支混判）────────────────────────────────
     def test_target_type_carries_no_analogy_notice(self):
-        """控制例：目标档自身不得带类比标注、证据不得被降级（否则标注面恒真）。"""
+        """控制例：目标档自身不得带分流标注、证据不得被降级（否则标注面恒真）。"""
         resp = reason(self.TARGET, "分户墙", location="全国")
         self.assertNotIn(self._notice(), resp.get("未覆盖领域", []))
         self.assertEqual(self._conf(resp, "activation"), ["deterministic"])
+        self.assertIn("GB 55038-2025", self._ids(resp),
+                      "住宅档自身丢了 GB 55038-2025（分流批误改住宅面）")
 
     def test_unmatched_analog_scene_stays_miss(self):
-        """控制例：类比档也无专用行的空间（公寓｜地下车库）仍判未命中，且不得挂类比标注。"""
+        """控制例：专用行与类比档均无行的空间（公寓｜地下车库）仍判未命中，且不得挂分流标注。"""
         resp = reason(self.ANALOG, "地下车库", location="全国")
         unc = resp.get("未覆盖领域", [])
         self.assertTrue(any("场景未命中" in u for u in unc),
                         f"公寓|地下车库 应走未命中最小集：{unc}")
-        self.assertNotIn(self._notice(), unc, "未命中态同时挂类比标注（两支混判即失去可失败性）")
+        self.assertNotIn(self._notice(), unc, "未命中态同时挂分流标注（两支混判即失去可失败性）")
 
-    def test_clearing_analogy_table_restores_miss(self):
-        """牙例：撤类比表（内存内、tearDown 回滚）后本组正向例必须转红，即本组非恒真。"""
-        saved = sre_reasoner.PROJECT_TYPE_ANALOGIES
+    def test_value_body_changed_only_by_the_mandatory_standard(self):
+        """分流只改分类归一与全文强制归属枚，**不改取值本体**：公寓 body 相对住宅 body 的差集，
+        多出的只可能是 GB 55025-2022、少掉的只可能是住宅专用枚 GB 55038-2025，其余成员六字段逐枚相等。
+
+        旧例 `test_value_body_identical_to_target_type` 断言的是「公寓与住宅逐枚相等」，那正是本批
+        要否掉的形态（相等即专用行未参与取族），故改判为「差集只允许这两枚」的正向读法。
+        户内吊顶一类不含声学域的差集为空属预期，其「非恒真」由 (二) 与上一支覆盖面例分别钉住。"""
+        for space in self.SPLIT_SCENES:
+            a = set(self._body(reason(self.ANALOG, space, location="全国")))
+            b = set(self._body(reason(self.TARGET, space, location="全国")))
+            only_a = sorted(x for x in a - b)
+            only_b = sorted(x for x in b - a)
+            self.assertTrue(all(x[0] == "GB 55025-2022" for x in only_a),
+                            f"公寓|{space} 相对住宅多出全文强制枚以外的成员：{only_a}")
+            self.assertTrue(all(x[0] == "GB 55038-2025" for x in only_b),
+                            f"公寓|{space} 相对住宅少掉的并非住宅专用枚：{only_b}")
+            self.assertNotIn("GB 55038-2025", [x[0] for x in a],
+                             f"公寓|{space} 仍含住宅专用限值枚")
+
+    # ── 牙例（本组非恒真自证）──────────────────────────────────────────
+    def test_clearing_dedicated_rows_falls_back_to_analogy(self):
+        """(六) 后一支＝撤专用行后须回到**类比态**而非未命中（防「专用行根本没被消费」的空跑）。
+
+        撤行后三向同断：仍命中（兜底支活着）＋标注仍在（两支同批）＋取族回到住宅档（兜底支确是
+        取族的承担者，而不只是命中的承担者）。"""
+        restore = self._drop_dedicated()
+        try:
+            resp = reason(self.ANALOG, "分户墙", location="全国")
+            unc = resp.get("未覆盖领域", [])
+            self.assertFalse(any("场景未命中" in u for u in unc),
+                             "撤专用行后公寓退回未命中 ⇒ 类比兜底并非命中的承担者")
+            self.assertIn(self._notice(), unc, "撤专用行后分流标注缺席（兜底与标注两支不同批）")
+            self.assertIn("类比兜底", self._source(resp, "activation")[0],
+                          f"撤专用行后仍报专用行：{self._source(resp, 'activation')[0]}")
+            self.assertIn("GB 55038-2025", self._ids(resp),
+                          "撤专用行后未回到住宅档 ⇒ 兜底支并非取族的承担者")
+        finally:
+            restore()
+        apt = {k for k in sre_reasoner.ACTIVATION_TABLE if k[0] == self.ANALOG}
+        self.assertTrue(apt, "回滚未生效，将污染后续用例")
+
+    def test_clearing_both_branches_restores_miss(self):
+        """牙例（换轴）：撤类比表后专用行仍须命中，而**同时**撤掉专用行与类比表才回到未命中——
+        两向并判，才既钉住「类比表已退役为兜底、标注支已改由分流承担」，又钉住本组正向例
+        不靠类比表顶绿（旧名 `test_clearing_analogy_table_restores_miss` 的对应例）。"""
+        saved_analog = sre_reasoner.PROJECT_TYPE_ANALOGIES
+        notice = self._notice()  # 须在改表前取，撤类比表后 _notice() 即失主语
+        saved_table = dict(sre_reasoner.ACTIVATION_TABLE)
         try:
             sre_reasoner.PROJECT_TYPE_ANALOGIES = {}
             unc = reason(self.ANALOG, "分户墙", location="全国").get("未覆盖领域", [])
-            self.assertTrue(any("场景未命中" in u for u in unc),
-                            "清空类比表后公寓仍命中激活表 ⇒ 类比支并非命中的承担者")
+            self.assertFalse(any("场景未命中" in u for u in unc),
+                             "撤类比表后公寓退回未命中 ⇒ 专用行并非命中的承担者")
+            self.assertNotIn(notice, unc,
+                             "撤类比表后仍挂分流标注 ⇒ 标注支仍由类比表承担，未随分流改判")
+            for k in [k for k in sre_reasoner.ACTIVATION_TABLE if k[0] == self.ANALOG]:
+                del sre_reasoner.ACTIVATION_TABLE[k]
+            unc2 = reason(self.ANALOG, "分户墙", location="全国").get("未覆盖领域", [])
+            self.assertTrue(any("场景未命中" in u for u in unc2),
+                            "两支全撤后仍命中 ⇒ 本组正向例恒真")
         finally:
-            sre_reasoner.PROJECT_TYPE_ANALOGIES = saved
-        self.assertEqual(sre_reasoner.PROJECT_TYPE_ANALOGIES, saved, "回滚未生效，将污染后续用例")
+            sre_reasoner.PROJECT_TYPE_ANALOGIES = saved_analog
+            sre_reasoner.ACTIVATION_TABLE.clear()
+            sre_reasoner.ACTIVATION_TABLE.update(saved_table)
+        self.assertEqual(sre_reasoner.PROJECT_TYPE_ANALOGIES, saved_analog, "回滚未生效")
+        self.assertTrue({k for k in sre_reasoner.ACTIVATION_TABLE if k[0] == self.ANALOG},
+                        "回滚未生效，将污染后续用例")
 
     def test_notice_literal_matches_rules_carrier(self):
         """跨载体对撞：代码常量标注逐字须在其判据载体内**在场恰一枚**。"""

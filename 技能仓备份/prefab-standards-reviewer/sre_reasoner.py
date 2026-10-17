@@ -1,11 +1,15 @@
 """
 SRE Reasoner —— 标准推理引擎参考实现
 =====================================
-版本：v1.9（2026-10-12，CG-20261012-006：项目类型类比归一上线——「公寓」按住宅档进 M3 场景推理面，
+版本：v1.10（2026-10-17，CG-20261017-006：「公寓」分流落地——§3.2 激活表与 DOMAINS 增设公寓专用行／专用族
+      （标准族＝GB 55025-2022 全文强制归属＋GB 50118-2010 旅馆档类比＋GB/T 50121-2005），取族与取序改为
+      **专用键优先、类比支降为兜底**；两支降级判据由「本次是否真走类比支」改判为「该建筑类型的适用关系
+      是否系参考级」，故专用行命中与类比兜底命中同判 inferred；标注换为分流三件事。闭台账 PL-200 实施面）
+      v1.9（2026-10-12，CG-20261012-006：项目类型类比归一上线——「公寓」按住宅档进 M3 场景推理面，
       命中即 activation／mapping 证据置信度降 inferred ＋「未覆盖领域」载显式标注，闭台账 PL-198 ②）
       v1.8（2026-09-26，CG-20260926-010：名称取数改 SOT 优先——主表 > 登记表 > 硬编码预置，闭 PL-002）
       v1.7（2026-09-17，CG-20260917-009：复查到期仅提醒，既有依据未确认仍降级）
-依据：standards-reasoning-rules.md v1.2.7 + interface-contracts.md IC-10 v1.9.0
+依据：standards-reasoning-rules.md v1.3.0 + interface-contracts.md IC-10 v1.9.0
 
 最小接口：
     reason(project_type, space_type, location=None, system=None,
@@ -133,6 +137,19 @@ ACTIVATION_TABLE: dict[tuple[str, str], list[str]] = {
     ("住宅", "户内吊顶"): ["acceptance", "prefab"],
     ("学校", "教室吊顶"): ["acoustic(吸声)", "fire", "acceptance"],
     ("办公", "办公吊顶"): ["acoustic(吸声)", "fire", "acceptance"],
+    # 「公寓」专用行（CG-20261017-006，台账 PL-200 裁定①「甲」实施步 (甲)）＝场景名逐枚与住宅侧对齐，
+    # 以免又生新轴；激活域集与住宅同场景同值（分流改的是分类归一与称谓，不改域集）。
+    # 存在这四支的前提＝类比只归一项目类型、不归一场景，若只改类比目标档则「公寓｜分户墙」等高频场景
+    # 当场退回 M6「场景未命中」最小集（＝功能回退，PL-200 行内红线）。取序上专用行恒优先于类比支，
+    # 类比支自此降为兜底（见下方 PROJECT_TYPE_ANALOGIES 注）。
+    ("公寓", "分户墙"): ["acoustic", "fire", "acceptance", "prefab"],
+    ("公寓", "户内隔墙"): ["acoustic", "fire", "acceptance"],
+    ("公寓", "户内墙面"): ["prefab(认定)", "acceptance", "environmental"],
+    ("公寓", "厨卫湿区"): ["prefab", "waterproof(外部协同)", "acceptance"],
+    ("公寓", "分户楼板"): ["acoustic(impact)", "fire", "acceptance", "prefab"],
+    ("公寓", "楼地面"): ["acoustic(impact)", "acceptance", "prefab"],
+    ("公寓", "厨卫集成吊顶"): ["acceptance", "prefab", "environmental", "waterproof(边界)"],
+    ("公寓", "户内吊顶"): ["acceptance", "prefab"],
 }
 
 # 空间类型归一化别名
@@ -141,23 +158,34 @@ SPACE_ALIASES: dict[str, str] = {
     "厨房": "厨卫湿区",
 }
 
-# 项目类型类比归一表（CG-20261012-006，台账 PL-198 ② 落地）
-# 键＝契约「项目类型」取值域内、§3.2 激活表无专用行的建筑类型；值＝(类比目标档, 对外标注逐字)。
-# 判据载体单源＝standards-reasoning-rules.md §3.2 Step 1「项目类型类比归一」注；该注所引标注
-# 与本常量字面由 sre_regression_test 的类比守卫逐字对撞，任一侧改而另一侧未改即复红（防成第二事实源）。
+# 项目类型类比兜底表（CG-20261012-006 上线；CG-20261017-006 起降为**兜底**）
+# 键＝契约「项目类型」取值域内、其适用关系在本合集系**参考级**而非确证的建筑类型；
+# 值＝(类比目标档, 对外标注逐字)。
+# 判据载体单源＝standards-reasoning-rules.md §3.2 Step 1「项目类型分流与类比兜底」注；该注所引标注
+# 与本常量字面由 sre_regression_test 的守卫逐字对撞，任一侧改而另一侧未改即复红（防成第二事实源）。
 # 机制形制沿上方 SPACE_ALIASES（键解析取序＝精确 → 空间别名 → 项目类比 → 两轴同归一，
-# 类比支恒居后 ⇒ 日后本表若新增公寓专用行，专用行自动优先，无须回改本函数）。
+# 类比支恒居后 ⇒ 本表新增专用行后专用行自动优先，无须回改取序；本表只在专用行缺失时兜底）。
+# 「公寓」自 CG-20261017-006 起在 ACTIVATION_TABLE 与 DOMAINS 均有专用行／专用族，本表该枚自此
+# **不再命中**而只作兜底：撤专用行时它把「公寓」接回住宅档而非「场景未命中」最小集（该向由守卫牙例钉）。
 # 判断先例沿台账 PL-089（类比取值可以，但输出必须显式标注、不得写成 S1 逐字引用）——
-# **两案不同因，措辞不得照抄**：PL-089 系官方限值缺位，本案系公寓的适用关系未经本合集索引
-# 核验取得，故标注如实写「非已确证适用」而非「非专用官方限值」。
+# **两案不同因，措辞不得照抄**：PL-089 系官方限值缺位，本案系公寓的适用关系仅由参考级记载支撑。
 PROJECT_TYPE_ANALOGIES: dict[str, tuple[str, str]] = {
     "公寓": (
         "住宅",
-        "项目类型「公寓」的适用面未在本合集标准索引取得记载，本条按住宅档类比参考、"
-        "非已确证适用；须先确认本项目建筑定性（住宅定性者 GB 55038-2025 即真值源；"
-        "商办／旅馆式公寓另按 GB 50118-2010 旅馆档复核），确认前不得把本条读作「经官方核验适用于公寓」",
+        "项目类型「公寓」在本合集按住宿期限分流（长租／员工／专家／学生公寓→宿舍，公寓式酒店→旅馆），"
+        "分流依据系 GB 55025-2022 起草说明「三、术语」·参考级（该分节位于「附：起草说明」，同件条文说明"
+        "自标不具备与规范正文同等的法律效力），非规范正文的确证适用记载；宿舍档在本合集无专用数值档，"
+        "本条数值系按 GB 50118-2010 旅馆档类比（台账 PL-089 终局口径，非宿舍专用官方限值）；"
+        "某项目属长期型还是公寓式酒店须由规划许可／设计文件人工确认，本合集不代判"
+        "（PL-200 ① 支「不新增建筑定性入参」经 CG-20261013-002 裁定不做），"
+        "确认前不得把本条读作「经官方核验适用于公寓」",
     ),
 }
+
+# 在 DOMAINS 各域内**另立专用族**的建筑类型键（区别于「默认」「全部」「全国」兜底键与
+# 「吊顶」「浙江」「轻钢龙骨」等构造／地点附加键）。Step 2 取族时该集内的键优先于类比目标键。
+# 判据＝standards-reasoning-rules.md §3.2 Step 2 acoustic 族表的「公寓」行。
+PROJECT_TYPE_FAMILY_KEYS: tuple[str, ...] = ("住宅", "公寓")
 
 
 def _resolve_project_type(project_type: str) -> str:
@@ -173,6 +201,12 @@ def _resolve_project_type(project_type: str) -> str:
 DOMAINS: dict[str, Any] = {
     "acoustic": {
         "住宅": ["GB 55038-2025", "GB 50118-2010", "GB/T 50121-2005"],
+        # 「公寓」专用族（CG-20261017-006，施工步 (甲)）＝全文强制归属由 GB 55025-2022 §1.0.2 承载
+        # （该条对宿舍与旅馆**同向**强制），数值出处仍系 GB 50118-2010 旅馆档类比（PL-089 终局口径，
+        # 非本枚新造）。逐行条文定位符见 rules.md §3.2 Step 2 该行的族注与
+        # 核验成果/GB 50118-2010_旅馆章隔声标准条文逐字核验_20261017.md。
+        # 本枚**不得**含 GB 55038-2025：该标准 §1.0.2 限「城镇住宅项目」，含它即读作仍按住宅类比。
+        "公寓": ["GB 55025-2022", "GB 50118-2010", "GB/T 50121-2005"],
         "默认": ["GB 50118-2010", "GB/T 50121-2005"],
         "轻钢龙骨": ["GB/T 19889.1-2026", "JG/T 544-2018", "07CJ03-1", "08J931"],
         "条板": ["GB/T 23451-2023"],
@@ -180,6 +214,8 @@ DOMAINS: dict[str, Any] = {
     },
     "acoustic(impact)": {
         "住宅": ["GB 55038-2025", "GB 50118-2010", "GB/T 50121-2005"],
+        # 同上；撞击声侧的旅馆档承载条文＝GB 50118-2010 第 7.2.4 条表 7.2.4（S1 既录＋2026-10-17 复现）
+        "公寓": ["GB 55025-2022", "GB 50118-2010", "GB/T 50121-2005"],
         "默认": ["GB 50118-2010", "GB/T 50121-2005"],
         "浮筑地面": ["GB/T 19889.7-2022", "GB/T 19889.8-2006", "GB/T 45305.3-2026", "08J931"],
         "架空地面": ["08J931"],
@@ -189,6 +225,10 @@ DOMAINS: dict[str, Any] = {
         # 吊顶对空气声隔声为贡献量而非独立判据，达标归属宿主构件标准
         # ——rules.md:248 注记 + 吊顶技能 reference.md:507「acoustic(贡献) → IC-09 估算 + 宿主构件标准归属」
         "住宅": ["GB 55038-2025"],
+        # 宿主构件达标归属走旅馆档类比（第 7.2.1 条表 7.2.1 客房之间的隔墙、楼板），不携全文强制编号：
+        # 该域只给贡献量归属，GB 55025-2022 的适用面在 acoustic／acoustic(impact) 两域已载，
+        # 在此重复即把「贡献量归属」读成该域另有一档判据。
+        "公寓": ["GB 50118-2010"],
         "默认": ["GB 50118-2010"],
         # 面板/龙骨产品标准与图集，同 rules.md:248 构造=吊顶行的六项列举（与 acoustic/吊顶 同族）
         "吊顶": ["GB/T 11981-2024", "GB/T 9775-2025", "JC/T 564.1-2018",
@@ -675,30 +715,38 @@ def _activate_domains(
                 f"已降级为最小集 fire+acceptance；建议确认场景表述或转专项技能咨询"
             )
     else:
-        # 类比档命中（CG-20261012-006）：置信度不得留 deterministic。理由＝标注若只落
-        # 「未覆盖领域」而证据仍判确定，下游只抄「适用标准集」即把未经核验的适用关系读成
-        # 已确证（独立复核 ④ 的一手判据）。故 activation 证据同批降 inferred ＋追加一条
-        # degradation 证据，复用既有降级语义、不给 IC-10 item 加字段（items 为
-        # additionalProperties: false，加字段即契约不兼容变更）。
-        by_analogy = analog is not None and key[0] == analog[0]
+        # 参考级适用档命中（CG-20261012-006 上线，CG-20261017-006 改判据）：置信度不得留 deterministic。
+        # 理由＝标注若只落「未覆盖领域」而证据仍判确定，下游只抄「适用标准集」即把未经确证的适用关系
+        # 读成已确证（独立复核 ④ 的一手判据）。故 activation 证据同批降 inferred ＋追加一条 degradation
+        # 证据，复用既有降级语义、不给 IC-10 item 加字段（items 为 additionalProperties: false，
+        # 加字段即契约不兼容变更）。
+        # **判据轴自本版起＝「该建筑类型的适用关系是否系参考级」，不再是「本次是否真走了类比支」**：
+        # 「公寓」已有专用行，若判据仍钉在类比支上，则专用行命中态会静默回到 deterministic，
+        # 而分流依据（GB 55025-2022 起草说明·参考级）并未因此升级为确证——属《条文存在≠机制生效》
+        # 族里「新形态把旧降级支挤成空跑」的一型。两态（专用行／类比兜底）同判 inferred，仅 规则来源
+        # 后缀分写，使「本次走的是哪一支」仍可追。
+        qualified = analog is not None
+        via_analogy = qualified and key[0] == analog[0] and key[0] != project_type
         evidence_list.append(_evidence(
             "activation",
             "standards-reasoning-rules.md §3.2 Step 1"
-            + ("（项目类型类比归一）" if by_analogy else ""),
+            + ("（项目类型类比兜底）" if via_analogy
+               else ("（项目类型专用行·适用关系参考级）" if qualified else "")),
             f"项目类型={project_type}, 空间类型={space_type}",
             f"命中场景行，候选域={candidates}",
-            "inferred" if by_analogy else "deterministic"
+            "inferred" if qualified else "deterministic"
         ))
-        if by_analogy and uncovered is not None:
+        if qualified and uncovered is not None:
             evidence_list.append(_evidence(
                 "degradation",
-                "standards-reasoning-rules.md §3.2 Step 1（项目类型类比归一）/ §五 M6",
-                f"项目类型={project_type} 在本表无专用行，按 {analog[0]} 档类比命中",
+                "standards-reasoning-rules.md §3.2 Step 1（项目类型分流与类比兜底）/ §五 M6",
+                f"项目类型={project_type} 的适用关系系参考级（专用行"
+                + ("，本次由类比档兜底命中）" if via_analogy else "），本条按该档取值"),
                 analog[1],
                 "inferred",
             ))
             # 沿断点4 口径：证据对象里的 inferred 属内部痕迹，使用者只读「未覆盖领域」，
-            # 故类比标注必须同时落到该可见面，不得只留在证据链内。
+            # 故分流标注必须同时落到该可见面，不得只留在证据链内。
             uncovered.append(analog[1])
 
     # 最小集始终激活
@@ -752,19 +800,24 @@ def _map_domain_to_standards(
     """M3 Step 2：将单个领域映射到标准族。"""
     mapping = DOMAINS.get(domain, {})
     standards: list[str] = []
-    # 项目类型类比归一（CG-20261012-006）：取族用类比档，对外标注与证据的 输入事实 仍载原值
-    ptype_key = _resolve_project_type(project_type)
-    branch_via_analogy = False
+    # 项目类型取族键（CG-20261012-006 上线，CG-20261017-006 扩为两支）：
+    # ① 该类型在**本域**另立专用族（PROJECT_TYPE_FAMILY_KEYS 且该键在本域 mapping 内）→ 取专用族；
+    # ② 否则退到类比档目标键（兜底通道，专用行缺失时把该类型接回目标档而非「无族」）。
+    # 对外标注与证据的 输入事实 仍载原值，不改取值本体。
+    has_dedicated = project_type in PROJECT_TYPE_FAMILY_KEYS and project_type in mapping
+    ptype_key = project_type if has_dedicated else _resolve_project_type(project_type)
+    # 降级判据轴同 Step 1＝「该类型的适用关系是否系参考级」，与本次走专用族还是类比族无关。
+    qualified_applicability = project_type in PROJECT_TYPE_ANALOGIES
+    via_analogy_family = qualified_applicability and not has_dedicated
+    family_via_project_type = False
 
     # 基础族：项目类型专属键须先于「默认」兜底命中。
     # 「医院/学校」若排在「默认」之后，environmental 域对医院/学校将永远先命中「默认」
     # （仅 GB 18580-2025），拿不到 rules.md §3.2 environmental 表规定的 GB 30981.1-2025
     # 与 T/CSUS 03-2019（断点1）。
-    if ptype_key == "住宅" and "住宅" in mapping:
-        standards.extend(mapping["住宅"])
-        # 该支经类比归一取得（如 公寓→住宅）时，本域标准族属类比参考而非确证适用，
-        # 证据置信度须与 Step 1 同批改判，不得一侧降一侧留（判据见 §3.2 类比归一注）。
-        branch_via_analogy = ptype_key != project_type
+    if ptype_key in PROJECT_TYPE_FAMILY_KEYS and ptype_key in mapping:
+        standards.extend(mapping[ptype_key])
+        family_via_project_type = True
     elif "全部" in mapping:
         standards.extend(mapping["全部"])
     elif "医院/学校" in mapping and project_type in ("医院", "学校"):
@@ -795,12 +848,16 @@ def _map_domain_to_standards(
             seen.add(s)
             unique.append(s)
 
+    # 降级面（沿 Step 1 同一判据轴）：只在「本域标准族系由该参考级类型专用族／类比族取得」时降，
+    # fire／acceptance 等「全部」族与该项目类型无涉，不降（CG-20261012-006 既有口径不变）。
+    degrade_mapping = qualified_applicability and family_via_project_type
     evidence_list.append(_evidence(
         "mapping", "standards-reasoning-rules.md §3.2 Step 2"
-        + ("（项目类型类比归一）" if branch_via_analogy else ""),
+        + ("（项目类型类比兜底取族）" if via_analogy_family
+           else ("（项目类型专用族·适用关系参考级）" if degrade_mapping else "")),
         f"领域={domain}, 项目类型={project_type}, 所在地={location}, 构造体系={system}",
         f"标准族={unique}",
-        "inferred" if (not unique or branch_via_analogy) else "deterministic"
+        "inferred" if (not unique or degrade_mapping) else "deterministic"
     ))
     return unique
 
