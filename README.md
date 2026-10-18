@@ -1,4 +1,13 @@
-# 装配式装修智能体技能合集
+<div align="center">
+  <img src="assets/logo.png" width="150" alt="装配式装修智能体技能合集">
+  <h1>装配式装修智能体技能合集</h1>
+  <p>面向装配式装修领域的智能体技能（Agent Skills）合集</p>
+  <p>
+    <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
+    <img src="https://img.shields.io/badge/skills-15-blue" alt="skills">
+    <img src="https://img.shields.io/badge/spec-SKILL.md-blueviolet" alt="spec">
+  </p>
+</div>
 
 面向装配式装修领域的**智能体技能（Agent Skills）**合集。技能遵循通用的 `SKILL.md` 约定（YAML frontmatter ＋ Markdown 正文），可在支持该约定的智能体平台中加载复用。覆盖隔墙、墙面、吊顶、楼地面、厨卫、收纳六大部品系统的选型与施工咨询，配套声学计算、机电管线协同、验收清单、规范标准复核等专项能力，并内置完整的治理文件体系（标准索引、接口契约、红线注册表、术语表、变更治理规则）。
 
