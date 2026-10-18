@@ -46,20 +46,20 @@
 
 ```mermaid
 flowchart TD
-    U(用户提问) --> OR[总入口·路由协调<br/>prefab-interior-systems-orchestrator]
-    OR --> EXP[材料选型·综合咨询<br/>prefab-interior-materials-expert]
+    U(用户提问) --> OR[总入口<br/>路由协调器]
+    OR --> EXP[材料选型<br/>综合咨询]
     subgraph PARTS [六大部品系统]
-        PW[隔墙<br/>partition-wall-solution]
-        WS[墙面<br/>wall-surface-system]
-        CL[吊顶<br/>ceiling-system]
-        FL[楼地面<br/>floor-system]
-        BK[厨卫<br/>bathroom-kitchen-system]
-        ST[收纳<br/>storage-system]
+        PW[隔墙]
+        WS[墙面]
+        CL[吊顶]
+        FL[楼地面]
+        BK[厨卫]
+        ST[收纳]
     end
     OR --> PARTS
     subgraph CALC [专项计算与协同]
-        ACE[隔声计算引擎<br/>acoustic-calculation-engine]
-        MEP[机电集成协调<br/>mep-integration-system]
+        ACE[隔声计算引擎]
+        MEP[机电集成协调]
     end
     PW -. "IC-03/08/09" .-> ACE
     FL -. "IC-03/08/09" .-> ACE
@@ -68,14 +68,16 @@ flowchart TD
     subgraph QA [质量与合规]
         AC[验收清单生成器]
         SR[规范标准复核]
-        SV[标准条文核验流水线]
+        SV[标准条文<br/>核验流水线]
         QT[技能质量测试]
     end
-    GOV[(治理文件 shared/<br/>标准索引 · 接口契约 · 红线注册表<br/>术语表 · 数据分级 · 变更治理)]
+    GOV[(治理文件<br/>shared/)]
     PARTS --- GOV
     QA --- GOV
     CALC --- GOV
 ```
+
+> 图中节点与技能目录全名的对应：OR＝`prefab-interior-systems-orchestrator`、EXP＝`prefab-interior-materials-expert`、PW／WS／CL／FL／BK／ST＝`prefab-partition-wall-solution`／`prefab-wall-surface-system`／`prefab-ceiling-system`／`prefab-floor-system`／`prefab-bathroom-kitchen-system`／`prefab-storage-system`、ACE＝`acoustic-calculation-engine`、MEP＝`prefab-mep-integration-system`、AC／SR／SV／QT＝`prefab-acceptance-checklist-generator`／`prefab-standards-reviewer`／`scanned-standard-clause-verify`／`skill-qa-tester`；圆柱 GOV＝`shared/` 下治理文件（标准索引、接口契约、红线注册表、术语表、数据分级、变更治理，逐件职责见下文「治理与证据体系」表）。节点标签刻意保持短行（完整目录名以「技能矩阵」表为单源），以规避渲染端对超长标签的换行裁切。
 
 三层协作：**部品技能**给方案与构造，**专项引擎**给可复算的性能估算，**质量合规技能**在出口把关（指标复核、红线拦截、验收闭环）；全部技能共同消费同一套治理文件，保证口径单源。技能间接口按编号契约（IC-xx）注册，请求/响应字段有单一事实源。
 
