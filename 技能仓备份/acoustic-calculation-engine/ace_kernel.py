@@ -3,6 +3,8 @@
 
 版本：1.0.0（2026-10-17，CG-20261017-007 立项并实施；发起人裁定逐字＝「按甲走，需具有前瞻性视角，不仅是当下」）
       CG-20261017-008 起按 PL-229 暂停工程定量出口（版本面单源＝SKILL.md frontmatter）
+      CG-20261018-001 两处行为面收口（台账 PL-231 ④／PL-232 ②）＝请求面执行契约在册的
+      `additionalProperties: false`（未登记键拒收）＋修假设注死支使 IC-09 缺「连接方式」时真披露
 依赖：Python 3.8+（仅标准库）
 判据陈述面：本目录 reference.md。**事实源口径（2026-10-17 独立复核后订正）**＝凡承载
             dB／h／mm 性能量、材料参数或判定阈值的常数与表档，一律以该件为唯一事实源，由
@@ -615,6 +617,11 @@ IC_FIELD_SPECS = {
             "计算选项": ("object", "可选"),
             "计算选项.输出详细度": ("string", "可选"),
             "计算选项.频率范围_Hz": ("object", "可选"),
+            # 契约 IC-03 请求 Schema 本就 declare 这两枚叶子（`频率范围_Hz.properties.下限/上限`），
+            # 字段约束表旧形制只在父行写「含下限/上限(number)」而未逐枚列行；CG-20261018-001 起
+            # 内核按在册集拒收未登记键，故随契约表补列同批入册（否则合法请求被自家守卫判未登记）。
+            "计算选项.频率范围_Hz.下限": ("number", "可选"),
+            "计算选项.频率范围_Hz.上限": ("number", "可选"),
         },
         "响应": {
             "计算结果": ("object", "是"),
@@ -878,13 +885,29 @@ def _collect_at_key(request, field_name):
     return [(p, v) for p, v in _walk_values(request) if p.rsplit(".", 1)[-1] == field_name]
 
 
+def _is_registered_path(path, spec_paths):
+    """契约在册判定（PL-231 ④ 支）＝路径自身在册，或系某条在册路径的容器段。
+
+    取 IC_FIELD_SPECS（＝契约件字段约束表的镜像，由 TestInterfaceFieldConservation
+    test_kernel_field_specs_equal_contract_tables 逐路径对撞）而非 JSON Schema＝本件不解析
+    契约件；表漏列一枚字段时 Schema 侧声明由同组 test_contract_table_paths_are_declared_in_schema
+    判红，故本判定的在册集与契约声明面同批漂移、不会单边放宽。
+    """
+    if path in spec_paths:
+        return True
+    return any(sp == path + "[]" or sp.startswith(path + ".") for sp in spec_paths)
+
+
 def validate_request(ic_id, request):
     """按 IC_FIELD_SPECS 校验请求，返回缺失的必填路径列表（空列表＝通过）。
 
-    三条拒收形态（各对应契约件/红线注册表的一条既有判据，本函数不新造判据）：
+    四条拒收形态（各对应契约件/红线注册表的一条既有判据，本函数不新造判据）：
       · 命中 FORBIDDEN_REQUEST_TOKENS → ComplianceJudgementRefused（红线 ACE-R-P1-3，不可由参数关闭）
       · 计算类型不在 MODEL_COMBINATION 内 → UnsupportedCalcType（SKILL.md §五 降级规则「计算类型不支持」）
       · 取值越出契约枚举域 → ParameterInsufficient 携带越域项（同降级规则「参数不足」形制）
+      · 路径不在契约在册集 → ParameterInsufficient（契约三枚 Request Schema 顶层
+        `additionalProperties: false` 的执行面；CG-20261018-001／台账 PL-231 ④ 支补上，
+        此前该承诺在内核侧只作用于响应面）
 
     分工写明以免两处判据：本函数只判**字段是否在场**与**取值是否越域**；
     数组元素级必填（"…[].x"）与条件必填（obligation 含「条件」或括注）由计算段取数时
@@ -932,6 +955,17 @@ def validate_request(ic_id, request):
                 bad_numeric.append("%s 超出契约合理范围 %.0f-%.0f：%s" % (fpath, lo, hi, val))
     if bad_numeric:
         raise ParameterInsufficient(bad_numeric)
+
+    # 未登记键拒收（台账 PL-231 ④ 支）：契约三枚 Request Schema 顶层 `additionalProperties: false`
+    # 此前在内核侧无执行面——实测＝请求塞「随便写」与把「连接方式」误写成「链接方式」均照收不拒，
+    # 后者还静默落到默认「刚性连接」并与 1047 行死支叠加＝调用方拼错键名即按默认档算且不披露。
+    # 判据不新造＝只执行契约已在册的封闭形制；容器段放行（`调用方标识`／`构造描述` 系 Schema 声明的
+    # 容器，非未登记键）。需求／限值类字段不属在册集，本判定对其天然拒收（PL-231 ⑤ 支据此不设入口）。
+    unregistered = sorted({p for p, _v in _walk_values(request)
+                           if not _is_registered_path(p, spec)})
+    if unregistered:
+        raise ParameterInsufficient(["未登记字段（契约请求面 additionalProperties=false）：%s"
+                                     % ", ".join(unregistered[:5])])
 
     missing = []
     for path, (_type, obligation) in spec.items():
@@ -1044,7 +1078,13 @@ def compute_airborne(ic_id, request):
     cavities = desc.get("空腔层", [])
     support = desc.get("支撑/连接系统", {})
     connection = support.get("连接方式", "刚性连接")
-    if "连接方式" in IC_FIELD_SPECS[ic_id]["请求"] and not support.get("连接方式"):
+    # 原形制缺陷（CG-20261018-001／台账 PL-232 ② 支）＝条件写作
+    # `"连接方式" in IC_FIELD_SPECS[ic_id]["请求"]`，而该 dict 的键是 dotted path
+    # （`构造描述.支撑/连接系统.连接方式`），裸名永不命中（本批复算现读 False）⇒ 分支恒不执行，
+    # 该句在 IC-03／IC-09 两条路径上都不产出；后果＝IC-09 侧「可选＋默认刚性连接」只改取值、
+    # 不披露假设，违红线 ACE-R-P2-1（连接方式类假设须列出）。修法＝按在册路径形制判定。
+    if "构造描述.支撑/连接系统.连接方式" in IC_FIELD_SPECS[ic_id]["请求"] \
+            and not support.get("连接方式"):
         assumptions.append("连接方式未指定，按默认「刚性连接」计并标注假设")
     seal = desc.get("密封方式", "未指定")
     options = request.get("计算选项", {})
