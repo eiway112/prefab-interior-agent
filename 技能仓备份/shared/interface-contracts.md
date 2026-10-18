@@ -193,7 +193,7 @@
 
 **IC-02 字段约束表（v1.5.5 形式化）**：
 
-> 以下为 IC-02 接口的结构化字段约束，用于 skill-qa-tester 与 validate_governance.py 自动校验。IC-IN 字段组定义见本文件 §二；输出模板枚举对应 prefab-interior-materials-expert SKILL.md《输出模板》选择指引（模板A-F）。
+> 以下为 IC-02 接口的结构化字段约束，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）。IC-IN 字段组定义见本文件 §二；输出模板枚举对应 prefab-interior-materials-expert SKILL.md《输出模板》选择指引（模板A-F）。
 
 *请求参数约束*：
 
@@ -222,7 +222,7 @@
 
 **IC-02 形式化 JSON Schema（v1.5.5）**：
 
-> 以下 JSON Schema 由上方字段约束表生成，可用于 skill-qa-tester 自动校验与 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表生成，可用于 validate_governance.py 检查 2 自动校验与 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-02-Request）*：
 
@@ -349,7 +349,7 @@
 
 **IC-14 字段约束表（v1.7.0 形式化）**：
 
-> 以下为 IC-14 接口的结构化字段约束，用于 skill-qa-tester 与 validate_governance.py 自动校验。AC 接收请求后按 SKILL.md 五步工作流生成清单；AC→各专项技能的技术要求交叉路由沿用 §2.2 上游结论传递规则（上游技能分析结论必传）。
+> 以下为 IC-14 接口的结构化字段约束，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）。AC 接收请求后按 SKILL.md 五步工作流生成清单；AC→各专项技能的技术要求交叉路由沿用 §2.2 上游结论传递规则（上游技能分析结论必传）。
 
 *请求参数约束*：
 
@@ -374,7 +374,7 @@
 
 **IC-14 形式化 JSON Schema（v1.7.0）**：
 
-> 以下 JSON Schema 由上方字段约束表生成，可用于 skill-qa-tester 自动校验与 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表生成，可用于 validate_governance.py 检查 2 自动校验与 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-14-Request）*：
 
@@ -440,7 +440,7 @@
 
 **IC-15 字段约束表**：
 
-> 用于 skill-qa-tester 与 validate_governance.py 自动校验。本表与 §9.1 IC-01 同构，差异仅在 `target_skill`／`skill_id` 取五值枚举；五支技能的各自专属字段（如吊顶的空腔层、厨卫的防水构造）不在本通用契约内约束，由该技能自身正文与专用契约承载，本契约不代收。
+> 用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）。本表与 §9.1 IC-01 同构，差异仅在 `target_skill`／`skill_id` 取五值枚举；五支技能的各自专属字段（如吊顶的空腔层、厨卫的防水构造）不在本通用契约内约束，由该技能自身正文与专用契约承载，本契约不代收。
 
 *请求参数约束*：
 
@@ -466,7 +466,7 @@
 
 **IC-15 形式化 JSON Schema**：
 
-> 由上方字段约束表生成，可用于 skill-qa-tester 自动校验。
+> 由上方字段约束表生成，可用于 validate_governance.py 检查 2 自动校验。
 
 *请求 Schema（IC-15-Request）*：
 
@@ -684,7 +684,7 @@
 
 **IC-03 字段约束表（ACE-IN/ACE-OUT 嵌套结构，v1.5）**：
 
-> 以下为 IC-03 接口的结构化字段约束，用于 skill-qa-tester 自动校验参数完整性。本版本已将请求/响应结构对齐《ACE架构边界与接口契约_v1.0.md》中的 ACE-IN/ACE-OUT 通用 Schema。
+> 以下为 IC-03 接口的结构化字段约束，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）参数完整性。本版本已将请求/响应结构对齐《ACE架构边界与接口契约_v1.0.md》中的 ACE-IN/ACE-OUT 通用 Schema。
 
 *请求参数约束*：
 
@@ -749,7 +749,7 @@
 
 **IC-03 形式化 JSON Schema（v1.5）**：
 
-> 以下 JSON Schema 由上方字段约束表自动生成，可用于 skill-qa-tester 自动校验。建仓后可直接用于 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表自动生成，可用于 validate_governance.py 检查 2 自动校验。建仓后可直接用于 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-03-Request）*：
 
@@ -1135,7 +1135,7 @@
 
 **IC-08 字段约束表（向形式化 schema 过渡）**：
 
-> 以下为 IC-08 接口的结构化字段约束，用于 skill-qa-tester 自动校验参数完整性。后续建仓时可据此生成机器可校验的 JSON Schema。
+> 以下为 IC-08 接口的结构化字段约束，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）参数完整性。后续建仓时可据此生成机器可校验的 JSON Schema。
 
 *请求参数约束*：
 
@@ -1173,7 +1173,7 @@
 
 **IC-08 形式化 JSON Schema（v1.4）**：
 
-> 以下 JSON Schema 由上方字段约束表自动生成，可用于 skill-qa-tester 自动校验。建仓后可直接用于 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表自动生成，可用于 validate_governance.py 检查 2 自动校验。建仓后可直接用于 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-08-Request）*：
 
@@ -1464,7 +1464,7 @@
 
 **IC-09 字段约束表（v1.5.3 形式化，闭环 IF-02）**：
 
-> 以下为 IC-09 接口的结构化字段约束，与 IC-03/IC-08 保持 ACE-IN/ACE-OUT 同构，用于 skill-qa-tester 与 validate_governance.py 自动校验。必填集依据《ACE架构边界与接口契约_v1.0.md》§3.3 吊顶调用边界（吊顶面板、空腔深度、吊杆类型、评价量为必传；填充材料、吊杆间距、密封方式可选）。
+> 以下为 IC-09 接口的结构化字段约束，与 IC-03/IC-08 保持 ACE-IN/ACE-OUT 同构，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）。必填集依据《ACE架构边界与接口契约_v1.0.md》§3.3 吊顶调用边界（吊顶面板、空腔深度、吊杆类型、评价量为必传；填充材料、吊杆间距、密封方式可选）。
 
 *请求参数约束*：
 
@@ -1511,7 +1511,7 @@
 
 **IC-09 形式化 JSON Schema（v1.5.3）**：
 
-> 以下 JSON Schema 由上方字段约束表生成，可用于 skill-qa-tester 自动校验与 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表生成，可用于 validate_governance.py 检查 2 自动校验与 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-09-Request）*：
 
@@ -1845,7 +1845,7 @@
 
 **IC-05 字段约束表（v1.5.5 形式化）**：
 
-> 以下为 IC-05 接口的结构化字段约束，用于 skill-qa-tester 与 validate_governance.py 自动校验。IC-05 为子技能交叉路由，按 §2.2 规则"上游技能分析结论"必传。适配性结论枚举与 v1.5.2 统一口径一致。
+> 以下为 IC-05 接口的结构化字段约束，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）。IC-05 为子技能交叉路由，按 §2.2 规则"上游技能分析结论"必传。适配性结论枚举与 v1.5.2 统一口径一致。
 
 *请求参数约束*：
 
@@ -1879,7 +1879,7 @@
 
 **IC-05 形式化 JSON Schema（v1.5.5）**：
 
-> 以下 JSON Schema 由上方字段约束表生成，可用于 skill-qa-tester 自动校验与 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表生成，可用于 validate_governance.py 检查 2 自动校验与 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-05-Request）*：
 
@@ -2021,7 +2021,7 @@
 
 **IC-06 字段约束表（v1.5.5 形式化）**：
 
-> 以下为 IC-06 接口的结构化字段约束，用于 skill-qa-tester 与 validate_governance.py 自动校验。IC-06 为子技能交叉路由，按 §2.2 规则"上游技能分析结论"必传。承载力结论枚举与 v1.5.2 统一口径一致。
+> 以下为 IC-06 接口的结构化字段约束，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）。IC-06 为子技能交叉路由，按 §2.2 规则"上游技能分析结论"必传。承载力结论枚举与 v1.5.2 统一口径一致。
 
 *请求参数约束*：
 
@@ -2055,7 +2055,7 @@
 
 **IC-06 形式化 JSON Schema（v1.5.5）**：
 
-> 以下 JSON Schema 由上方字段约束表生成，可用于 skill-qa-tester 自动校验与 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表生成，可用于 validate_governance.py 检查 2 自动校验与 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-06-Request）*：
 
@@ -2295,7 +2295,7 @@
 
 **IC-07 字段约束表（v1.5.5 形式化）**：
 
-> 以下为 IC-07 接口的结构化字段约束，用于 skill-qa-tester 与 validate_governance.py 自动校验。IC-07 发起方为任意技能（标识见 §五技能标识映射表），故不设固定 const；请求仅含标准复核所需的最小查询参数集，与上方最小参数集一致。
+> 以下为 IC-07 接口的结构化字段约束，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）。IC-07 发起方为任意技能（标识见 §五技能标识映射表），故不设固定 const；请求仅含标准复核所需的最小查询参数集，与上方最小参数集一致。
 
 *请求参数约束*：
 
@@ -2318,7 +2318,7 @@
 
 **IC-07 形式化 JSON Schema（v1.5.5）**：
 
-> 以下 JSON Schema 由上方字段约束表生成，可用于 skill-qa-tester 自动校验与 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表生成，可用于 validate_governance.py 检查 2 自动校验与 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-07-Request）*：
 
@@ -2418,7 +2418,7 @@
 
 **IC-10 字段约束表（向形式化 schema 过渡）**：
 
-> 以下为 IC-10 接口的结构化字段约束，用于 skill-qa-tester 自动校验参数完整性。后续建仓时可据此生成机器可校验的 JSON Schema。
+> 以下为 IC-10 接口的结构化字段约束，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）参数完整性。后续建仓时可据此生成机器可校验的 JSON Schema。
 
 *请求参数约束*：
 
@@ -2465,7 +2465,7 @@
 
 **IC-10 形式化 JSON Schema（v1.9.0）**：
 
-> 以下 JSON Schema 由上方字段约束表自动生成，可用于 skill-qa-tester 自动校验。建仓后可直接用于 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表自动生成，可用于 validate_governance.py 检查 2 自动校验。建仓后可直接用于 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-10-Request）*：
 
@@ -2681,7 +2681,7 @@
 
 **IC-11 字段约束表（v1.6.0 形式化）**：
 
-> 以下为 IC-11 接口的结构化字段约束，用于 skill-qa-tester 与 validate_governance.py 自动校验。IC-11 发起方以 SR（标准复核工具）为主，亦可为任何需要条文级取真的技能（标识见 §五技能标识映射表）。
+> 以下为 IC-11 接口的结构化字段约束，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）。IC-11 发起方以 SR（标准复核工具）为主，亦可为任何需要条文级取真的技能（标识见 §五技能标识映射表）。
 
 *请求参数约束*：
 
@@ -2704,7 +2704,7 @@
 
 **IC-11 形式化 JSON Schema（v1.6.0）**：
 
-> 以下 JSON Schema 由上方字段约束表生成，可用于 skill-qa-tester 自动校验与 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表生成，可用于 validate_governance.py 检查 2 自动校验与 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-11-Request）*：
 
@@ -2775,7 +2775,7 @@
 
 **IC-12 字段约束表（v1.7.0 形式化）**：
 
-> 以下为 IC-12 接口的结构化字段约束，用于 skill-qa-tester 与 validate_governance.py 自动校验。发起方以治理变更收尾与打包发布场景为主；QA 按五阶段测试流程执行。
+> 以下为 IC-12 接口的结构化字段约束，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）。发起方以治理变更收尾与打包发布场景为主；QA 按五阶段测试流程执行。
 
 *请求参数约束*：
 
@@ -2798,7 +2798,7 @@
 
 **IC-12 形式化 JSON Schema（v1.7.0）**：
 
-> 以下 JSON Schema 由上方字段约束表生成，可用于 skill-qa-tester 自动校验与 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表生成，可用于 validate_governance.py 检查 2 自动校验与 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-12-Request）*：
 
@@ -2874,7 +2874,7 @@
 
 **IC-13 字段约束表（v1.7.0 形式化）**：
 
-> 以下为 IC-13 接口的结构化字段约束，用于 skill-qa-tester 与 validate_governance.py 自动校验。GS 只负责同步执行层；定级与审批规则以 change-governance.md 为唯一事实源（GS-R-P1-4）。
+> 以下为 IC-13 接口的结构化字段约束，用于 validate_governance.py 检查 2 自动校验（校验对象＝由本表生成的请求 Schema）。GS 只负责同步执行层；定级与审批规则以 change-governance.md 为唯一事实源（GS-R-P1-4）。
 
 *请求参数约束*：
 
@@ -2896,7 +2896,7 @@
 
 **IC-13 形式化 JSON Schema（v1.7.0）**：
 
-> 以下 JSON Schema 由上方字段约束表生成，可用于 skill-qa-tester 自动校验与 CI/CD 管线中的接口契约校验。
+> 以下 JSON Schema 由上方字段约束表生成，可用于 validate_governance.py 检查 2 自动校验与 CI/CD 管线中的接口契约校验。
 
 *请求 Schema（IC-13-Request）*：
 

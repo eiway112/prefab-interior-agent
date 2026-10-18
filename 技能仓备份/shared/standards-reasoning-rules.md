@@ -165,7 +165,7 @@
 ### 2.4 锚定集与 standards-index.md 的关系
 
 - 锚定是 standards-index.md 条目的**属性标记**（`is_anchor: yes/no`），不创建独立数据文件
-- standards-index.md 保留完整 79 条目录作为**版本注册中心**
+- standards-index.md 保留完整 82 条目录作为**版本注册中心**
 - 锚定标记区分两种角色：**校准基准**（is_anchor=yes）和**版本追踪**（is_anchor=no）
 - 技能文件只需引用 13 条锚定标准 + 推理引擎规则，无需复制完整目录
 
