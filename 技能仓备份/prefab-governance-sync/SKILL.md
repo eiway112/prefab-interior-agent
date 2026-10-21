@@ -1,7 +1,7 @@
 ---
 name: prefab-governance-sync
 description: 装配式装修技能合集治理文件三层同步与发布流程（项目仓策划 ↔ 运行时 skills 根 SOT ↔ shared 只读镜像）。当用户要求同步治理文件、发布技能更新、同步 standards-index/glossary/interface-contracts/红线注册表、或发现三层文件不一致需要修复漂移时使用。变更定级与审批规则不在此技能，以 change-governance.md 为唯一事实源。
-version: 1.2.2
+version: 1.2.3
 ---
 
 # 治理文件三层同步（prefab-governance-sync）
@@ -9,6 +9,8 @@ version: 1.2.2
 ## 定位
 
 装配式装修技能合集治理文件的**执行层同步流水线**（薄技能）：只管"怎么同步、怎么验收"。变更定级（S/A/B/C）、审批流程、专项规则的唯一事实源是 `change-governance.md`（项目仓 `治理文件/` 与 `shared/` 各一份，须保持同步）。
+
+> **分发面边界（公开派生面）**：本技能描述的是**开发仓**的三层同步流水线；L1 开发源 `治理文件/` 与同步器 `维护脚本/sync_skill_backup.py` 属开发仓维护面，不随 `技能仓备份/` 镜像与公开派生面分发（公开派生面中显示为 `治理文件/` 与 `维护脚本/sync_skill_backup.py`）。在只有公开派生面的环境里，本技能只能作流程参考：可照「脚本化同步流程」的判据手工比对哈希，但不得声称已完成 L1→L2→L3 带平或三层一致。
 
 ## 三层结构与文件映射
 
