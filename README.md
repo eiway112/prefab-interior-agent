@@ -5,12 +5,14 @@
   <p>
     <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
     <img src="https://img.shields.io/badge/skills-15-blue" alt="skills">
-    <img src="https://img.shields.io/badge/spec-SKILL.md-blueviolet" alt="spec">
+    <img src="https://img.shields.io/badge/public%20face-80%20files-blueviolet" alt="public face">
     <img src="https://img.shields.io/badge/governance-8%20files-orange" alt="governance">
   </p>
 </div>
 
 > **一句话定位**：把装配式装修的选型、构造、机电协同、验收与规范复核，做成一组可直接装进智能体平台的 `SKILL.md` 技能。全部技能共用同一套治理文件；数值尽量带**来源分级与核验状态**；隔声系统定量预测现阶段暂停，引擎只给**诊断、风险识别与适用边界**；超范围按红线拒给确定数值。
+
+> **先看边界**：本仓是**派生分发面**，只含技能本体与治理文件镜像，当前共 80 个文件。维护脚本、核验报告、台账与开发记录**不随包**；需要跑机算预检或治理门禁时回开发仓。详见[公开面边界](#公开面边界随包--不随包)。
 
 ## 目录
 
@@ -31,7 +33,7 @@
 
 ## 这是什么
 
-技能遵循通用的 `SKILL.md` 约定（YAML frontmatter ＋ Markdown 正文），可在支持该约定的智能体平台中加载复用。覆盖**隔墙、墙面、吊顶、楼地面、厨卫、收纳**六大部品系统的选型与施工咨询，配套**隔声计算引擎、机电管线协同、验收清单生成、规范标准复核**等专项能力，并内置 8 份治理文件（标准索引、接口契约、红线注册表、术语表、数据分级与变更治理规则；**文档随包分发，维护脚本与核验报告不随包**，见[公开面边界](#公开面边界随包--不随包)）。
+技能遵循通用的 `SKILL.md` 约定（YAML frontmatter ＋ Markdown 正文），可在支持该约定的智能体平台中加载复用。合集覆盖**隔墙、墙面、吊顶、楼地面、厨卫、收纳**六大部品系统，配套**隔声计算引擎、机电管线协同、验收清单生成、规范标准复核**等专项能力，并内置 8 份治理文件（标准索引、接口契约、红线注册表、术语表、数据分级与变更治理规则；**文档随包分发，维护脚本与核验报告不随包**）。
 
 装进平台后直接用自然语言提问即可。合集以「总入口路由 ＋ 专项技能协同」工作：综合问题由编排技能识别意图并分派，专项问题直达对应技能，跨部品问题走机电集成协调与集成校验。
 
@@ -50,8 +52,8 @@
 
 ```mermaid
 flowchart TD
-    U([用户提问]) --> OR[总入口<br/>路由协调器]
-    OR --> EXP[材料选型<br/>综合咨询]
+    U([用户提问]) --> OR[总入口]
+    OR --> EXP[材料咨询]
 
     subgraph PARTS [六大部品系统]
         direction LR
@@ -62,12 +64,12 @@ flowchart TD
 
     subgraph CALC [专项计算与协同]
         direction LR
-        ACE[隔声计算引擎] ~~~ MEP[机电集成协调]
+        ACE[隔声引擎] ~~~ MEP[机电协同]
     end
     PW -. "IC-03/08/09" .-> ACE
     FL -. "IC-03/08/09" .-> ACE
     CL -. "IC-03/08/09" .-> ACE
-    PARTS -. "跨部品管线协同" .-> MEP
+    PARTS -. "跨部品协同" .-> MEP
 
     subgraph QA [质量与合规出口]
         direction LR
@@ -82,7 +84,7 @@ flowchart TD
     QA --- GOV
 ```
 
-> 图中节点与技能目录全名的对应：OR＝`prefab-interior-systems-orchestrator`、EXP＝`prefab-interior-materials-expert`、PW／WS／CL／FL／BK／ST＝`prefab-partition-wall-solution`／`prefab-wall-surface-system`／`prefab-ceiling-system`／`prefab-floor-system`／`prefab-bathroom-kitchen-system`／`prefab-storage-system`、ACE＝`acoustic-calculation-engine`、MEP＝`prefab-mep-integration-system`、AC／SR／SV／QT＝`prefab-acceptance-checklist-generator`／`prefab-standards-reviewer`／`scanned-standard-clause-verify`／`skill-qa-tester`；圆柱 GOV＝`shared/` 下治理文件（逐件职责见[治理与证据体系](#治理与证据体系)）。节点标签刻意保持短行（完整目录名以[技能矩阵](#技能矩阵15-个)为单源），以规避渲染端对超长标签的换行裁切。
+> 图中只放短标签，完整目录名以[技能矩阵](#技能矩阵15-个)为单源：OR＝`prefab-interior-systems-orchestrator`、EXP＝`prefab-interior-materials-expert`、PW／WS／CL／FL／BK／ST＝`prefab-partition-wall-solution`／`prefab-wall-surface-system`／`prefab-ceiling-system`／`prefab-floor-system`／`prefab-bathroom-kitchen-system`／`prefab-storage-system`、ACE＝`acoustic-calculation-engine`、MEP＝`prefab-mep-integration-system`、AC／SR／SV／QT＝`prefab-acceptance-checklist-generator`／`prefab-standards-reviewer`／`scanned-standard-clause-verify`／`skill-qa-tester`；圆柱 GOV＝`shared/` 下 8 件治理文件（逐件职责见[治理与证据体系](#治理与证据体系)）。用户能力图不含维护向的 `prefab-governance-sync`，它只用于治理文件同步，见技能矩阵。
 
 三层协作：**部品技能**给方案与构造，**专项引擎**给诊断、风险识别与适用边界（系统定量预测现阶段暂停），**质量合规技能**在出口把关（指标复核、红线拦截、验收闭环）；全部技能共同消费同一套治理文件，保证口径单源。技能间接口按编号契约（IC-xx）注册，请求/响应字段有单一事实源。
 
@@ -92,22 +94,22 @@ flowchart TD
 sequenceDiagram
     autonumber
     participant U as 用户
-    participant OR as 总入口协调器
+    participant OR as 总入口
     participant SK as 专项技能
     participant GOV as 治理文件
     participant ACE as 隔声引擎
 
     U->>OR: 自然语言提问
     OR->>OR: 意图识别 · 路由分派
-    OR->>SK: 转交（隔墙／吊顶／厨卫／…）
-    SK->>GOV: 读标准索引 · 接口契约 · 红线注册表
-    GOV-->>SK: 现行版本 · 字段约束 · 禁止行为
+    OR->>SK: 转交专项技能
+    SK->>GOV: 读标准/契约/红线
+    GOV-->>SK: 版本 · 字段 · 禁止项
     opt 涉及隔声／撞击声
-        SK->>ACE: IC-03／IC-08／IC-09 请求
-        ACE-->>SK: 诊断 · 风险识别 · 适用边界（定量暂停）
+        SK->>ACE: IC-03／IC-08／IC-09
+        ACE-->>SK: 诊断 · 风险 · 边界
     end
-    SK-->>OR: 候选构造 ＋ 执行要点 ＋ 缺项与翻转条件
-    OR-->>U: 分级输出（风险审查优先／仅供方案比较）
+    SK-->>OR: 构造 · 要点 · 缺项
+    OR-->>U: 分级输出
 ```
 
 ## 技能矩阵（15 个）
@@ -134,27 +136,36 @@ sequenceDiagram
 
 ## 隔声计算引擎（ACE）
 
-隔声是本合集估算密度最高的专业面，单独抽成通用引擎，由隔墙/楼地面/吊顶技能经编号接口（IC-03 空气声 / IC-08 撞击声 / IC-09 侧向传声）调用：
+隔声是本合集估算密度最高的专业面，单独抽成通用引擎，由隔墙/楼地面/吊顶技能经编号接口（IC-03 空气声 / IC-08 撞击声 / IC-09 侧向传声）调用。
+
+```mermaid
+flowchart LR
+    REQ["计算请求"] --> K{"参数与范围"}
+    K -- "合法系统" --> PAUSE["定量暂停"]
+    K -- "不足/超范围" --> DEG["诊断型降级"]
+    PAUSE --> DEG
+    DEG --> OUT["诊断输出"]
+```
+
+**当前输出规则**（PL-229 暂停期）：
+
+| 输入情况 | 引擎返回 | 不返回 |
+|---|---|---|
+| 合法系统 | 诊断型降级：质量与频率诊断、声桥/缝隙风险、关键假设、适用边界、人工评估建议 | dB、数字区间、精度承诺 |
+| 参数不足 / 超范围 | 降级结构：缺失项、风险识别、超出范围提示 | 猜填参数、确定数值 |
+| 有匹配且可溯源的检测报告 | 可引用报告原评价量，并记录报告编号与匹配核对 | 以同材料或相似构造推定同构造；以 STC 当 Rw；把报告值外推为变体性能 |
+| 需要工程结论 | 以 CMA/CNAS 检测报告和现行标准为准 | 以模型预测替代检测或验收 |
 
 | 层 | 内容 |
 |---|---|
 | 物理模型 M1—M7 | 质量定律 · Cremer 吻合效应 · 双叶墙 MSM 共振 · 空腔增益 · 撞击声改善量 · 声桥/缝隙修正 · 检测报告基准校准 |
 | 可执行内核 | `acoustic-calculation-engine/ace_kernel.py`（Python 3.8+，仅标准库；唯一入口 `compute_request(ic_id, request)`，参数不足/超范围一律以降级结构返回而非抛错） |
-| 输出纪律 | 现阶段对合法系统定量预测一律返回**诊断型降级**（不含 dB 与数字区间）；携带风险识别、关键假设、适用边界声明与人工评估建议，可引用匹配的检测报告值；**超出模型适用范围时拒给确定数值**（红线） |
+| 输出纪律 | 现阶段对合法系统定量预测一律返回**诊断型降级**（不含 dB 与数字区间）；可引用匹配的检测报告值；**超出模型适用范围时拒给确定数值**（红线） |
 | 数据纪律 | 材料参数与基准表带来源分级（S1 国标条文 / S2 产品检测统计 / S3 经验常数 / S4 行业估算）；S2 及以下输出附数据源说明 |
-
-```mermaid
-flowchart LR
-    REQ["IC-03／08／09 请求"] --> K{"ace_kernel<br/>参数与适用范围"}
-    K -- "参数不足／超范围" --> DEG["降级结构<br/>诊断 · 风险 · 假设 · 边界"]
-    K -- "合法系统" --> PAUSE["定量预测现阶段暂停"]
-    PAUSE --> DEG
-    DEG --> OUT["输出：不含 dB 与数字区间<br/>可引用匹配的检测报告值"]
-```
 
 ## 治理与证据体系
 
-本合集不只是一组提示词——每个技能背后是同一套可核查的治理文件（随仓分发，位于 `技能仓备份/shared/` 与 `技能仓备份/standards-index.md`）：
+本合集不只是一组提示词——每个技能背后是同一套可核查的治理文件（随仓分发，位于 `技能仓备份/shared/`、`技能仓备份/standards-index.md` 与 `技能仓备份/platform-adapter-reference.md`）：
 
 | 文件 | 承担什么 |
 |---|---|
@@ -167,50 +178,43 @@ flowchart LR
 | `shared/change-governance.md` | 变更治理规则：S/A/B/C 定级、审批流程与变更日志（**公开面不含 §九／§11.2**） |
 | `shared/platform-adapter-reference.md` | 平台适配参考：跨智能体平台加载的适配说明 |
 
-配套机制（写进技能正文、可被提问直接触发）：**已废止标准自动降级并提示替代关系**；**实验室评价量（Rw+C）与现场评价量（DnT,w+C）不得混用**；**估算与检测值不得互替**；数值缺依据时显式降级而不是编造。
-
 ```mermaid
 flowchart LR
-    STD["现行标准<br/>standards-index"] --> CLS["来源分级<br/>S1／S2／S3／S4"]
-    RPT["检测报告与核验报告<br/>核验成果/（不随包）"] -. "凭据指认" .-> CLS
-    CLS --> BODY["技能正文<br/>数值 ＋ 档位 ＋ 核验状态"]
+    STD["现行标准"] --> CLS["来源分级"]
+    RPT["检测报告"] -. "凭据" .-> CLS
+    CLS --> BODY["技能正文"]
     RED["红线注册表"] --> BODY
-    BODY --> OUT["分级输出<br/>带假设与适用边界"]
+    BODY --> OUT["分级输出"]
 ```
+
+> **来源分级**：S1 国标条文 / S2 检测统计 / S3 经验常数 / S4 行业估算。检测报告与核验成果**不随包**，正文中的相关路径只作来源指认。
+
+配套机制（写进技能正文、可被提问直接触发）：**已废止标准自动降级并提示替代关系**；**实验室评价量（Rw+C）与现场评价量（DnT,w+C）不得混用**；**估算与检测值不得互替**；数值缺依据时显式降级而不是编造。
 
 ## 公开面边界（随包 / 不随包）
 
 本仓是**技能分发面**：只含技能本体与治理文件镜像。开发仓的过程记录、维护脚本与校验门禁（治理登记、批凭据、各道验证脚本）不随本仓分发。
 
-```mermaid
-flowchart TD
-    subgraph IN ["随包分发（本仓 80 件）"]
-        direction TB
-        A["15 个技能目录<br/>SKILL.md ＋ reference/examples"]
-        B["shared/ 治理文件 8 件"]
-        C["standards-index.md<br/>platform-adapter-reference.md"]
-        D["4 个 Python 件<br/>ace_kernel · sre_reasoner · 2 件测试"]
-        E["README · LICENSE · CHANGELOG · .gitattributes · logo"]
-    end
-    subgraph OUT ["不随包（开发仓维护面）"]
-        direction TB
-        F["维护脚本<br/>sscv 身份预检 · validate_governance · 同步器"]
-        G["核验成果/ 报告 · 执行记录/ · 文档目录/"]
-        H["治理文件/ L1 源 · 台账源/ · 数据分类复核清单"]
-        I["change-governance §九 变更日志／§11.2 遗留台账"]
-    end
-    IN -. "正文中的这些路径只作来源指认，本仓不可直接打开" .-> OUT
-```
+| 类别 | 随包（合计 80 个文件） | 不随包 |
+|---|---|---|
+| 技能本体 | 15 个技能目录，65 个文件（含 4 个 Python 件：`ace_kernel.py`、`sre_reasoner.py`、2 件测试） | — |
+| 治理文件 | `shared/` 8 件 ＋ 根级副本 2 件（`standards-index.md`、`platform-adapter-reference.md`），共 10 个文件 | 开发仓 `治理文件/` L1 源、`台账源/`、数据分类复核清单；`change-governance.md` 的 §九／§11.2 |
+| 根级文件 | `README.md`、`LICENSE`、`CHANGELOG.md`、`.gitattributes`、`assets/logo.png`，共 5 个文件 | — |
+| 证据与记录 | — | `核验成果/`、`执行记录/`、`文档目录/`（含检测报告、核验报告、产品资料原件） |
 
-**不随包的三类内容**：① 维护脚本（SSCV 身份预检 `sscv_identity_precheck.py`、治理校验器 `validate_governance.py`、三层同步器 `sync_skill_backup.py` 等）；② 核验报告与执行记录（`核验成果/`、`执行记录/`、`文档目录/`）；③ L1 开发源与台账（`治理文件/`、`台账源/`，含变更治理 §九／§11.2）。需要跑机算预检或治理门禁时须回到开发仓；`scanned-standard-clause-verify` 与 `prefab-governance-sync` 两件已在正文标注该边界与人工降级口径。
+**计数**：65 ＋ 10 ＋ 5 ＝ 80 个文件；上表按文件归属划分，不重复计数。
+
+**为什么这样切**：证据与记录可能含本机环境、项目信息与开发过程；维护脚本依赖开发仓的目录结构；台账是内部追溯面。正文中出现的这些路径只作**来源指认**，在本仓不可直接打开。
+
+**派生纪律**：本仓由开发仓的派生器生成；内容改动先落开发仓，再重新派生，不直接编辑本仓。
 
 ## 快速开始
 
 ```mermaid
 flowchart LR
-    D["下载／克隆本仓"] --> C["复制 技能仓备份/ 下所需技能目录"]
-    C --> S["连同 standards-index.md 与 shared/ 一并复制"]
-    S --> R["重启智能体平台"]
+    D["下载/克隆"] --> C["复制技能目录"]
+    C --> S["复制索引与 shared"]
+    S --> R["重启平台"]
     R --> Q["直接提问"]
 ```
 
@@ -239,18 +243,18 @@ prefab-interior-agent/
 
 ## 行尾前提（最容易踩的一条）
 
-仓根 `.gitattributes` 声明 `* text eol=lf`，请保留。你的机器若设了 `core.autocrlf=true`（Windows 上常见，且可能是全局而非仓库级），删掉或绕过该文件会让清洁克隆的工作树整体转成 CRLF，从而与文件内部记录的字节形态不一致。自验法：`git ls-files --eol | awk '{print $1}' | sort | uniq -c`——文本件应全部落 `i/lf`。
+仓根 `.gitattributes` 声明 `* text eol=lf`，请保留。你的机器若设了 `core.autocrlf=true`（Windows 上常见，且可能是全局而非仓库级），删掉或绕过该文件会让清洁克隆的工作树整体转成 CRLF，从而与文件内部记录的字节形态不一致。自验法：`git ls-files --eol` 中文本件应落 `i/lf`。
 
 ## 运行环境
 
-技能为纯文本资产，直接复制即可用，无运行依赖。ACE 可执行内核 `ace_kernel.py` 仅用 Python 3.8+ 标准库。若后续要自建校验，Python 3.10+ 可跑（部分维护脚本有 PEP 604 签名）。
+技能为纯文本资产，直接复制即可用，无运行依赖。ACE 可执行内核 `ace_kernel.py` 仅用 Python 3.8+ 标准库。开发仓的维护脚本另需 Python 3.10+（部分脚本有 PEP 604 签名），这些脚本不随包。
 
 ## 版本与迭代策略
 
-- 合集整体采用语义化版本 `MAJOR.MINOR.PATCH`，每个发布基线打 git 标签（如 `v1.0.0`），历史变更见 [CHANGELOG.md](CHANGELOG.md)。
+- 本仓当前尚未建立 git 标签基线；后续发布基线建议打 tag（如 `v1.0.0`），引用时锁定到具体标签，避免跟随主干拿到中间状态。
+- 公开面变更见 [CHANGELOG.md](CHANGELOG.md)；各技能的具体版本以 `SKILL.md` frontmatter 的 `version` 字段为准。
 - 规范标准修订、技能内容勘误以 PATCH/MINOR 发布；架构或契约级调整以 MAJOR 发布。
-- 引用时建议锁定到具体标签（下载 tag 对应的源码包），避免跟随主干拿到中间状态。
-- 反馈与纠错：欢迎开 Issue（使用问题、数据纠错、标准失效线索均可）；后续演进方向为单技能独立版本发布（各技能 frontmatter 已内置 version 字段）与 Releases 分发打包产物。
+- 反馈与纠错：欢迎开 Issue（使用问题、数据纠错、标准失效线索均可）；后续演进方向为单技能独立版本发布与 Releases 分发打包产物。
 
 ## 引用与署名
 
