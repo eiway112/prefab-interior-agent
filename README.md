@@ -222,7 +222,7 @@ flowchart LR
    - GitHub：`git clone https://github.com/eiway112/prefab-interior-agent.git`
    - Gitee：`git clone https://gitee.com/eiway112/prefab-interior-agent.git`
 2. 将 `技能仓备份/` 下所需的技能目录复制到你所用平台的**技能加载目录**（例如 Qoder：`~/.qoder/skills/`；Windows 下为 `C:\Users\<你的用户名>\.qoder\skills\`。其他平台请以其文档为准）。
-3. 如需完整的技能协同能力（技能间相互调用与治理约束），请将全部技能目录连同 `技能仓备份/standards-index.md` 与 `技能仓备份/shared/` 一并复制；复制这些件不会补回开发仓的维护脚本、核验报告与执行记录。
+3. **必装项**：请将全部技能目录连同 `技能仓备份/standards-index.md` 与 `技能仓备份/shared/` 一并复制。技能正文硬引用 `../shared/`（红线注册表、接口契约、术语表等治理约束），缺 `shared/` 时技能仍会加载但**静默失去红线与契约约束、不报错**——只复制单个技能目录拿到的是弱化版。复制这些件不会补回开发仓的维护脚本、核验报告与执行记录。
 4. 重启你的智能体平台，直接提问即可，例如：“分户隔墙选什么方案能达到 Rw 45 dB？”
 
 ## 目录结构
@@ -251,7 +251,7 @@ prefab-interior-agent/
 
 ## 版本与迭代策略
 
-- 本仓当前尚未建立 git 标签基线；后续发布基线建议打 tag（如 `v1.0.0`），引用时锁定到具体标签，避免跟随主干拿到中间状态。
+- 本仓当前尚未建立 git 标签基线；在此之前引用请锁定到 main 的**具体 commit**（提交历史见本仓 Git 记录，公开面变更见 CHANGELOG.md），避免跟随主干拿到中间状态。后续发布基线建立 tag（如 `v1.0.0`）后改为锁定标签。
 - 公开面变更见 [CHANGELOG.md](CHANGELOG.md)；各技能的具体版本以 `SKILL.md` frontmatter 的 `version` 字段为准。
 - 规范标准修订、技能内容勘误以 PATCH/MINOR 发布；架构或契约级调整以 MAJOR 发布。
 - 反馈与纠错：欢迎开 Issue（使用问题、数据纠错、标准失效线索均可）；后续演进方向为单技能独立版本发布与 Releases 分发打包产物。
