@@ -33,7 +33,7 @@ IC07_STATUS_ENUM = ["现行有效", "即将实施", "过渡期", "被部分替�
 IC07_OPINION_ENUM = ["可引用", "仅供参考", "需替代", "不适用", "需人工确认"]
 SR_REDLINE_COUNT = 14          # P0×3 + P1×7 + P2×4
 REGISTRY_TOTAL_COUNT = 178     # 全合集红线总数（2026-08-14 ME 注册+AC-R-P1-5 后基线；CG-20260817-006 同步）
-SR_VERSION = "2.2.2"
+SR_VERSION = "2.2.3"
 
 
 def _ic07_contract_block() -> str:
