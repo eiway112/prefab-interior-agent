@@ -129,7 +129,7 @@ sequenceDiagram
 | 专项 | `prefab-mep-integration-system` | 机电管线集成：管线分离策略、检修路径、设备点位、安装顺序编排 |
 | 质量 | `prefab-acceptance-checklist-generator` | 过程检查/隐蔽验收/分项验收/竣工交付清单生成与整改闭环 |
 | 质量 | `prefab-standards-reviewer` | 技术指标表的规范标准核验：版本有效性、条文定位、数据档位 |
-| 质量 | `scanned-standard-clause-verify` | 扫描版/文本版标准 PDF 的身份核验与条文原文核验流水线（**公开面只含流程与判据**，预检工具与核验报告不随包） |
+| 质量 | `scanned-standard-clause-verify` | 扫描版/文本版标准 PDF 的身份核验与条文原文核验流水线（**公开面只含流程与判据**，预检工具、核验报告与索引/CG 登记不随包） |
 | 质量 | `skill-qa-tester` | 技能质量测试：功能完整性、数据准确性、内部一致性、红线合规 |
 | 治理 | `prefab-governance-sync` | 治理文件三层同步与发布流程（**公开面只作流程参考**，L1 源与同步器不随包） |
 
@@ -170,7 +170,7 @@ flowchart LR
 
 | 文件 | 承担什么 |
 |---|---|
-| `standards-index.md` | 规范标准索引：收录标准的编号、名称、效力状态（现行/废止/被替代）与**核验状态标注**；条数以该件头部计数现读为准 |
+| `standards-index.md` | 规范标准索引：收录标准的编号、名称、效力状态（现行/废止/被替代）与**核验状态标注**；条数以该件头部计数现读为准（公开面不含 §八变更日志） |
 | `shared/redlines-registry.md` | 红线注册表：逐技能登记“不得违反”的输出约束（如超范围禁给确定数值、评价量不得混用），条数以该件现读为准 |
 | `shared/interface-contracts.md` | 技能间接口契约（IC-xx 编号化）：请求/响应字段约束的单一事实源 |
 | `shared/standards-reasoning-rules.md` | 标准适用性推理规则：废止标准降级、替代切换、地域适用性等判则 |
@@ -199,7 +199,7 @@ flowchart LR
 | 类别 | 随包（合计 80 个文件） | 不随包 |
 |---|---|---|
 | 技能本体 | 15 个技能目录，65 个文件（含 4 个 Python 件：`ace_kernel.py`、`sre_reasoner.py`、2 件测试） | — |
-| 治理文件 | `shared/` 8 件 ＋ 根级副本 2 件（`standards-index.md`、`platform-adapter-reference.md`），共 10 个文件 | 开发仓 `治理文件/` L1 源、`台账源/`、数据分类复核清单；`change-governance.md` 的 §九／§11.2 |
+| 治理文件 | `shared/` 8 件 ＋ 根级副本 2 件（`standards-index.md`、`platform-adapter-reference.md`），共 10 个文件 | 开发仓 `治理文件/` L1 源、`台账源/`、数据分类复核清单；`change-governance.md` 的 §九／§11.2；`standards-index.md` 的 §八 |
 | 根级文件 | `README.md`、`LICENSE`、`CHANGELOG.md`、`.gitattributes`、`assets/logo.png`，共 5 个文件 | — |
 | 证据与记录 | — | `核验成果/`、`执行记录/`、`文档目录/`（含检测报告、核验报告、产品资料原件） |
 
@@ -224,6 +224,7 @@ flowchart LR
    - Gitee：`git clone https://gitee.com/eiway112/prefab-interior-agent.git`
 2. 将 `技能仓备份/` 下所需的技能目录复制到你所用平台的**技能加载目录**（例如 Qoder：`~/.qoder/skills/`；Windows 下为 `C:\Users\<你的用户名>\.qoder\skills\`。其他平台请以其文档为准）。
 3. **必装项**：请将全部技能目录连同 `技能仓备份/standards-index.md` 与 `技能仓备份/shared/` 一并复制。技能正文硬引用 `../shared/`（红线注册表、接口契约、术语表等治理约束），缺 `shared/` 时技能仍会加载但**静默失去红线与契约约束、不报错**——只复制单个技能目录拿到的是弱化版。复制这些件不会补回开发仓的维护脚本、核验报告与执行记录。
+   复制后自检：`技能仓备份/shared/` 下应有 8 个 `.md`（清单见上方治理表），且 `技能仓备份/standards-index.md` 在位；可执行 `ls 技能仓备份/shared/*.md | wc -l`（Git Bash/macOS/Linux）或 `(Get-ChildItem 技能仓备份/shared/*.md).Count`（PowerShell），结果应为 8。缺任一件即停止，不要以“能加载”当作“完整可用”。
 4. 重启你的智能体平台，直接提问即可，例如：“分户隔墙选什么方案能达到 Rw 45 dB？”
 
 ## 目录结构
