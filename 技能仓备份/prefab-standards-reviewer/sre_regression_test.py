@@ -55,6 +55,11 @@ SRE_SOURCE = Path(sre_reasoner.__file__).resolve()
 SRE_SRC = SRE_SOURCE.read_text(encoding="utf-8")
 _SRC_TREE = ast.parse(SRE_SRC)
 _REPORT_PATH = Path(__file__).resolve().parent / "sre_regression_report.json"
+# 报告路径相对化锚（私密路径防扩散）：skills 根（运行时 ~/.qoder/skills/ 或仓内镜像
+# 技能仓备份/，取实际跑侧）。报告 measurements 原记绝对路径（含本机用户名），该 json
+# 随技能目录整目录复制即外泄；相对化后承载位置语义不变（prefab-standards-reviewer/…、
+# shared/…），跨机器可读。锚外路径退化为 basename（必不含用户名）。
+_SKILLS_ROOT = SRE_SOURCE.parent.parent
 
 # 与 sre_reasoner._load_standards_index() 的候选顺序一致
 _INDEX_CANDIDATES = [
@@ -2019,12 +2024,22 @@ class TestProjectTypeAnalogy(unittest.TestCase):
                              f">1＝另有引用处，两向都使「单源」这句判据失实）")
 
 
+def _rel(path: Path) -> str:
+    # 见 _SKILLS_ROOT 注释：measurements 的 path 值与 standards_index 分组键一律走本函数。
+    try:
+        return path.relative_to(_SKILLS_ROOT).as_posix()
+    except ValueError:
+        return path.name
+
+
 def _fingerprint(path: Path) -> dict:
     try:
         data = path.read_bytes()
     except OSError as exc:
-        return {"path": str(path), "readable": False, "error": str(exc)}
-    return {"path": str(path), "readable": True, "bytes": len(data),
+        # error 只记异常类型与 errno：OSError 的 str() 会携带系统路径串（含用户名），不落报告。
+        return {"path": _rel(path), "readable": False,
+                "error": f"{type(exc).__name__}({exc.errno})"}
+    return {"path": _rel(path), "readable": True, "bytes": len(data),
             "sha256_12": hashlib.sha256(data).hexdigest()[:12]}
 
 
@@ -2063,7 +2078,7 @@ def run_and_report() -> int:
         "gap_signals": GAP_SIGNALS,
         "measurements": {
             "sre_reasoner": _fingerprint(SRE_SOURCE),
-            "standards_index": {str(p): _fingerprint(p) for p in _INDEX_CANDIDATES if p.exists()},
+            "standards_index": {_rel(p): _fingerprint(p) for p in _INDEX_CANDIDATES if p.exists()},
         },
     }
     _REPORT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
