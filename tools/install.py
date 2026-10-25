@@ -24,7 +24,7 @@ for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8")
 
 REPO = Path(__file__).resolve().parents[1]
-SRC = REPO / "技能仓备份"
+SRC = REPO / "skills"
 ROOT_FILES = ["standards-index.md", "platform-adapter-reference.md"]
 
 
@@ -86,7 +86,7 @@ def main() -> int:
 
     if not SRC.is_dir():
         print(f"[install] 找不到技能源目录：{SRC}", file=sys.stderr)
-        print("[install] 请从仓库根目录运行本脚本，或确认 技能仓备份/ 未被裁剪。", file=sys.stderr)
+        print("[install] 请从仓库根目录运行本脚本，或确认 skills/ 未被裁剪。", file=sys.stderr)
         return 2
 
     sk = skills(SRC)

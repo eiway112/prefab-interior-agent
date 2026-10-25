@@ -9,7 +9,7 @@
 | 分发面（本仓） | GitHub `prefab-interior-agent` | 技能本体、治理文件、安装与自检工具；只读使用 |
 | 开发仓（私有） | 不对外公开 | 技能源、台账、批次脚本与全量门禁；改动先落此，再派生 |
 
-`技能仓备份/` 是技能本体的根目录（仓内沿用开发仓的目录名）；`tools/install.py` 把它的内容复制到宿主技能目录。两层的边界与文件构成见 [README 的「公开面边界」](README.md#公开面边界随包--不随包)。
+`skills/` 是技能本体的根目录；`tools/install.py` 把它的内容复制到宿主技能目录。`examples/` 下的示例输出件由开发仓从各技能 `examples.md` 原样抽取生成，不是手写副本。两层的边界与文件构成见 [README 的「公开面边界」](README.md#公开面边界随包--不随包)。
 
 ## 2. 运行时结构
 
@@ -37,10 +37,10 @@ flowchart LR
 
 | 模块 | 规模 | 职责 | 公开测试 |
 |---|---|---|---|
-| `技能仓备份/acoustic-calculation-engine/ace_kernel.py` | 1,482 行 | 质量—频率诊断、MSM 模型、吻合效应；系统定量预测现阶段暂停 | 回归套件在开发仓，未随包 |
-| `技能仓备份/prefab-standards-reviewer/sre_reasoner.py` | 1,197 行 | 标准复核推理与引用分级 | `sre_regression_test.py` 84 例随包 |
-| `技能仓备份/prefab-standards-reviewer/sre_regression_test.py` | 2,107 行 | SRE 回归 | 自测 |
-| `技能仓备份/prefab-standards-reviewer/sr_ic07_compliance_test.py` | 175 行 | IC-07 合规回归 | 自测 |
+| `skills/acoustic-calculation-engine/ace_kernel.py` | 1,482 行 | 质量—频率诊断、MSM 模型、吻合效应；系统定量预测现阶段暂停 | 回归套件在开发仓，未随包 |
+| `skills/prefab-standards-reviewer/sre_reasoner.py` | 1,197 行 | 标准复核推理与引用分级 | `sre_regression_test.py` 84 例随包 |
+| `skills/prefab-standards-reviewer/sre_regression_test.py` | 2,115 行 | SRE 回归 | 自测 |
+| `skills/prefab-standards-reviewer/sr_ic07_compliance_test.py` | 175 行 | IC-07 合规回归 | 自测 |
 | `tools/install.py` | 129 行 | 安装到宿主技能目录 | CI 安装复检 |
 | `tools/smoke_test.py` | 122 行 | 包结构与引用自检 | CI 直接运行 |
 

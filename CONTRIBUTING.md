@@ -33,6 +33,7 @@ python tools/smoke_test.py
 1. 优先开 Issue：数据纠错、标准失效线索、场景改进，按上面四件事给齐来源。
 2. 也可以开 PR 演示修改；维护者会在开发仓同批落地、重新派生后关闭该 PR，并在 `CHANGELOG.md` 记贡献者。
 3. 新增技能或改判据，先在 Issue 对齐范围；判据类改动须走开发仓的变更分级与复核。
+4. `examples/` 下的示例输出同样由开发仓从技能 `examples.md` 抽取，本仓直接改会在下次派生被覆盖——请改 Issue 指向技能示例正文。
 
 ## Pull Request
 

@@ -27,7 +27,7 @@ for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8")
 
 REPO = Path(__file__).resolve().parents[1]
-SRC = REPO / "技能仓备份"
+SRC = REPO / "skills"
 SHARED_EXPECTED = [
     "change-governance.md",
     "data-classification.md",
