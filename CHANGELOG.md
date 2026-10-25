@@ -2,6 +2,15 @@
 
 本仓为技能分发面，只记录对外发布基线的变更；开发过程记录不进本仓。
 
+## v1.0.4 — 2026-10-25
+
+可运行入口与贡献面（不改变技能内容、数值与契约）：
+
+- **新增 `tools/`**：`install.py`（一条命令装到技能目录，支持 `--target`／`--dry-run`／`--force`）与 `smoke_test.py`（校验 15 个 SKILL.md、frontmatter、`../shared/` 引用、8 份治理文件与标准索引）。只用 Python 3.10+ 标准库。
+- **新增贡献面**：`CONTRIBUTING.md`、`.github/ISSUE_TEMPLATE/`（数据纠错／场景建议）、`.github/workflows/smoke.yml`（Ubuntu／Windows × Python 3.10／3.12 跑自检与安装复检）。
+- **README 首屏重写**：一句话定位、与「直接问大模型」的区别、3 分钟上手；公开面计数 80 → 87。
+- 不改变任何技能正文、工程数值、红线与契约。
+
 ## v1.0.3 — 2026-10-22
 
 README 可读性修复（不改变技能内容、数值与契约）：

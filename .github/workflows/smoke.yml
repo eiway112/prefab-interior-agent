@@ -1,0 +1,26 @@
+name: smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: 包结构自检
+        run: python tools/smoke_test.py
+      - name: 安装到临时目录并复检
+        run: python tools/install.py --target "${{ runner.temp }}/skills"
+      - name: 复检安装结果
+        run: python tools/smoke_test.py --target "${{ runner.temp }}/skills"

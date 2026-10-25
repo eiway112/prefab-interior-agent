@@ -1,21 +1,35 @@
 <div align="center">
   <img src="assets/logo.png" width="150" alt="装配式装修智能体技能合集">
   <h1>装配式装修智能体技能合集</h1>
-  <p>面向装配式装修领域的智能体技能（Agent Skills）合集 —— 选型咨询 · 性能估算 · 机电协同 · 验收与合规</p>
+  <p>15 个可加载的智能体技能：隔墙 · 墙面 · 吊顶 · 楼地面 · 厨卫 · 收纳，配套声学计算 · 机电协同 · 验收 · 规范复核</p>
   <p>
     <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
     <img src="https://img.shields.io/badge/skills-15-blue" alt="skills">
-    <img src="https://img.shields.io/badge/public%20face-80%20files-blueviolet" alt="public face">
-    <img src="https://img.shields.io/badge/governance-8%20files-orange" alt="governance">
+    <img src="https://img.shields.io/badge/tools-install%20%2B%20smoke-blueviolet" alt="tools">
+    <img src="https://img.shields.io/badge/public%20face-87%20files-lightgrey" alt="public face">
   </p>
 </div>
 
-> **一句话定位**：把装配式装修的选型、构造、机电协同、验收与规范复核，做成一组可直接装进智能体平台的 `SKILL.md` 技能。全部技能共用同一套治理文件；数值尽量带**来源分级与核验状态**；隔声系统定量预测现阶段暂停，引擎只给**诊断、风险识别与适用边界**；超范围按红线拒给确定数值。
+> **一句话**：把装配式装修的选型、构造、机电协同、验收与规范复核，做成智能体能直接调用的技能；每条数值尽量带**来源分级**与**核验状态**，越界时明确说「这条不成立」。
 
-> **先看边界**：本仓是**派生分发面**，只含技能本体与治理文件镜像，当前共 80 个文件。维护脚本、核验报告、台账与开发记录**不随包**；需要跑机算预检或治理门禁时回开发仓。详见[公开面边界](#公开面边界随包--不随包)。
+> **它和「直接问大模型」的区别**：不是更能说，而是**说得出依据，也说得出边界**。已核验条文与未核验条文分开标；标准废止按红线 AC-R-P0-2 降级并提示替代；缺依据时降级或拒答，而不是编一个看起来专业的数。
+
+> **先看边界**：本仓是**派生分发面**，共 87 个文件（技能本体＋治理文件＋安装/自检工具）。开发仓的维护脚本、核验报告与执行记录**不随包**；需要跑完整门禁时回开发仓。详见[公开面边界](#公开面边界随包--不随包)。
+
+## 3 分钟上手
+
+```sh
+git clone https://github.com/eiway112/prefab-interior-agent.git
+cd prefab-interior-agent
+python tools/install.py          # 装到 ~/.qoder/skills，可用 --target 改目录
+python tools/smoke_test.py --target ~/.qoder/skills   # 自检 15 技能 + 8 份治理文件
+```
+
+重启智能体宿主，直接提问即可。需要 Python 3.10+，无第三方依赖。手动安装与其他平台见[快速开始](#快速开始)。
 
 ## 目录
 
+- [3 分钟上手](#3-分钟上手)
 - [这是什么](#这是什么)
 - [能力地图](#能力地图)
 - [一次提问怎么走](#一次提问怎么走)
@@ -196,14 +210,15 @@ flowchart LR
 
 本仓是**技能分发面**：只含技能本体与治理文件镜像。开发仓的过程记录、维护脚本与校验门禁（治理登记、批凭据、各道验证脚本）不随本仓分发。
 
-| 类别 | 随包（合计 80 个文件） | 不随包 |
+| 类别 | 随包（合计 87 个文件） | 不随包 |
 |---|---|---|
 | 技能本体 | 15 个技能目录，65 个文件（含 4 个 Python 件：`ace_kernel.py`、`sre_reasoner.py`、2 件测试） | — |
 | 治理文件 | `shared/` 8 件 ＋ 根级副本 2 件（`standards-index.md`、`platform-adapter-reference.md`），共 10 个文件 | 开发仓 `治理文件/` L1 源、`台账源/`、数据分类复核清单；`change-governance.md` 的 §九／§11.2；`standards-index.md` 的 §八 |
-| 根级文件 | `README.md`、`LICENSE`、`CHANGELOG.md`、`.gitattributes`、`assets/logo.png`，共 5 个文件 | — |
+| 根级文件 | `README.md`、`LICENSE`、`CHANGELOG.md`、`.gitattributes`、`assets/logo.png`、`CONTRIBUTING.md`，共 6 个文件 | — |
+| 工程工具 | `tools/`（安装器、自检、说明）3 件；`.github/`（CI、两类 issue 模板）3 件，共 6 个文件 | 开发仓的维护脚本、批凭据脚本、发布门禁 |
 | 证据与记录 | — | `核验成果/`、`执行记录/`、`文档目录/`（含检测报告、核验报告、产品资料原件） |
 
-**计数**：65 ＋ 10 ＋ 5 ＝ 80 个文件；上表按文件归属划分，不重复计数。
+**计数**：65 ＋ 10 ＋ 6 ＋ 6 ＝ 87 个文件；上表按文件归属划分，不重复计数。
 
 **为什么这样切**：证据与记录可能含本机环境、项目信息与开发过程；维护脚本依赖开发仓的目录结构；台账是内部追溯面。正文中出现的这些路径只作**来源指认**，在本仓不可直接打开。
 
@@ -213,27 +228,41 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    D["下载/克隆"] --> C["复制技能目录"]
-    C --> S["复制索引与 shared"]
+    D["下载/克隆"] --> I["python tools/install.py"]
+    I --> S["python tools/smoke_test.py"]
     S --> R["重启平台"]
     R --> Q["直接提问"]
 ```
+
+**方式 A：一条命令（推荐）**
+
+```sh
+git clone https://github.com/eiway112/prefab-interior-agent.git
+cd prefab-interior-agent
+python tools/install.py          # 可用 --target 指定其他技能目录、--dry-run 只看计划
+python tools/smoke_test.py --target ~/.qoder/skills
+```
+
+**方式 B：手动复制**
 
 1. 下载本仓库：在仓库页面点击 **Code → Download ZIP**，或执行
    - GitHub：`git clone https://github.com/eiway112/prefab-interior-agent.git`
    - Gitee：`git clone https://gitee.com/eiway112/prefab-interior-agent.git`
 2. 将 `技能仓备份/` 下所需的技能目录复制到你所用平台的**技能加载目录**（例如 Qoder：`~/.qoder/skills/`；Windows 下为 `C:\Users\<你的用户名>\.qoder\skills\`。其他平台请以其文档为准）。
 3. **必装项**：请将全部技能目录连同 `技能仓备份/standards-index.md` 与 `技能仓备份/shared/` 一并复制。技能正文硬引用 `../shared/`（红线注册表、接口契约、术语表等治理约束），缺 `shared/` 时技能仍会加载但**静默失去红线与契约约束、不报错**——只复制单个技能目录拿到的是弱化版。复制这些件不会补回开发仓的维护脚本、核验报告与执行记录。
-   复制后自检：`技能仓备份/shared/` 下应有 8 个 `.md`（清单见上方治理表），且 `技能仓备份/standards-index.md` 在位；可执行 `ls 技能仓备份/shared/*.md | wc -l`（Git Bash/macOS/Linux）或 `(Get-ChildItem 技能仓备份/shared/*.md).Count`（PowerShell），结果应为 8。缺任一件即停止，不要以“能加载”当作“完整可用”。
 4. 重启你的智能体平台，直接提问即可，例如：“分户隔墙选什么方案能达到 Rw 45 dB？”
+
+**装完自检**：`python tools/smoke_test.py --target <安装目录>` 应输出 PASS（15 个技能、8 份治理文件、标准索引）。缺任一件即停止，不要以「能加载」当作「完整可用」。
 
 ## 目录结构
 
 ```
 prefab-interior-agent/
-├── README.md / LICENSE / CHANGELOG.md   ← 说明 · MIT 许可 · 变更记录
+├── README.md / LICENSE / CHANGELOG.md / CONTRIBUTING.md
+├── tools/                               ← install.py（安装）· smoke_test.py（自检）
+├── .github/                             ← CI（push / PR 跑自检）· issue 模板
 ├── assets/                              ← 品牌资源
-└── 技能仓备份/                           ← 对外引用入口：复制这里
+└── 技能仓备份/                           ← 对外引用入口：技能本体与治理文件
     ├── prefab-*/ · acoustic-*/ · scanned-*/ · skill-qa-tester/
     │                                    ← 15 个技能目录（SKILL.md ＋ reference/examples 等）
     ├── standards-index.md               ← 规范标准索引（含核验状态标注）
