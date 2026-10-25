@@ -7,6 +7,7 @@
     <img src="https://img.shields.io/badge/skills-15-blue" alt="skills">
     <img src="https://img.shields.io/badge/python-3.10%2B-yellow" alt="python">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
+    <a href="https://github.com/eiway112/prefab-interior-agent/actions/workflows/smoke.yml"><img src="https://github.com/eiway112/prefab-interior-agent/actions/workflows/smoke.yml/badge.svg" alt="CI"></a>
   </p>
 </div>
 
@@ -33,7 +34,7 @@ python tools/smoke_test.py --target ~/.qoder/skills   # 自检 15 技能 + 8 份
 
 技能遵循通用的 `SKILL.md` 约定（YAML frontmatter ＋ Markdown 正文），可在支持该约定的智能体平台中加载复用。合集覆盖**隔墙、墙面、吊顶、楼地面、厨卫、收纳**六大部品系统，配套**隔声计算引擎、机电管线协同、验收清单生成、规范标准复核**等专项能力，并内置 8 份治理文件（标准索引、接口契约、红线注册表、术语表、数据分级与变更治理规则；**文档随包分发，维护脚本与核验报告不随包**）。
 
-装进平台后直接用自然语言提问即可。合集以「总入口路由 ＋ 专项技能协同」工作：综合问题由编排技能识别意图并分派，专项问题直达对应技能，跨部品问题走机电集成协调与集成校验。
+装进平台后直接用自然语言提问即可。模块边界、数据流与扩展点见 [ARCHITECTURE.md](ARCHITECTURE.md)。合集以「总入口路由 ＋ 专项技能协同」工作：综合问题由编排技能识别意图并分派，专项问题直达对应技能，跨部品问题走机电集成协调与集成校验。
 
 | 你问 | 合集做什么 |
 |---|---|
@@ -57,6 +58,8 @@ python tools/smoke_test.py --target ~/.qoder/skills   # 自检 15 技能 + 8 份
 - [隔声计算引擎（ACE）](#隔声计算引擎ace)
 - [治理与证据体系](#治理与证据体系)
 - [公开面边界（随包 / 不随包）](#公开面边界随包--不随包)
+- [代码架构](ARCHITECTURE.md)
+- [质量与测试](#质量与测试)
 - [快速开始](#快速开始)
 - [目录结构](#目录结构)
 - [行尾前提（最容易踩的一条）](#行尾前提最容易踩的一条)
@@ -212,19 +215,32 @@ flowchart LR
 
 本仓是**技能分发面**：只含技能本体与治理文件镜像。开发仓的过程记录、维护脚本与校验门禁（治理登记、批凭据、各道验证脚本）不随本仓分发。
 
-| 类别 | 随包（合计 87 个文件） | 不随包 |
+| 类别 | 随包（合计 88 个文件） | 不随包 |
 |---|---|---|
 | 技能本体 | 15 个技能目录，65 个文件（含 4 个 Python 件：`ace_kernel.py`、`sre_reasoner.py`、2 件测试） | — |
 | 治理文件 | `shared/` 8 件 ＋ 根级副本 2 件（`standards-index.md`、`platform-adapter-reference.md`），共 10 个文件 | 开发仓 `治理文件/` L1 源、`台账源/`、数据分类复核清单；`change-governance.md` 的 §九／§11.2；`standards-index.md` 的 §八 |
-| 根级文件 | `README.md`、`LICENSE`、`CHANGELOG.md`、`.gitattributes`、`assets/logo.png`、`CONTRIBUTING.md`，共 6 个文件 | — |
+| 根级文件 | `README.md`、`ARCHITECTURE.md`、`LICENSE`、`CHANGELOG.md`、`.gitattributes`、`assets/logo.png`、`CONTRIBUTING.md`，共 7 个文件 | — |
 | 工程工具 | `tools/`（安装器、自检、说明）3 件；`.github/`（CI、两类 issue 模板）3 件，共 6 个文件 | 开发仓的维护脚本、批凭据脚本、发布门禁 |
 | 证据与记录 | — | `核验成果/`、`执行记录/`、`文档目录/`（含检测报告、核验报告、产品资料原件） |
 
-**计数**：65 ＋ 10 ＋ 6 ＋ 6 ＝ 87 个文件；上表按文件归属划分，不重复计数。
+**计数**：65 ＋ 10 ＋ 7 ＋ 6 ＝ 88 个文件；上表按文件归属划分，不重复计数。
 
 **为什么这样切**：证据与记录可能含本机环境、项目信息与开发过程；维护脚本依赖开发仓的目录结构；台账是内部追溯面。正文中出现的这些路径只作**来源指认**，在本仓不可直接打开。
 
 **派生纪律**：本仓由开发仓的派生器生成；内容改动先落开发仓，再重新派生，不直接编辑本仓。
+
+## 质量与测试
+
+本仓自带 **104 例**可跑的回归测试，全部随包；安装后即可复跑：
+
+| 套件 | 例数 | 运行方式（安装后） |
+|---|---|---|
+| SRE 引擎回归 | 84 | `python <安装目录>/prefab-standards-reviewer/sre_regression_test.py` |
+| IC-07 合规回归 | 20 | `python <安装目录>/prefab-standards-reviewer/sr_ic07_compliance_test.py` |
+
+CI 在 Ubuntu／Windows × Python 3.10／3.12 上执行：包结构自检、安装到临时目录并复检、上述 104 例。
+
+开发仓另有 22 道门禁（台账一致性、数据分类、冻结基准、跨层字节一致等）不随包。**公开面通过只证结构一致与随包测试通过，不证内容正确**；数值与条文的正确性以核验记录与检测报告为准。
 
 ## 快速开始
 

@@ -24,3 +24,7 @@ jobs:
         run: python tools/install.py --target "${{ runner.temp }}/skills"
       - name: 复检安装结果
         run: python tools/smoke_test.py --target "${{ runner.temp }}/skills"
+      - name: 引擎回归（SRE 84 例）
+        run: python "${{ runner.temp }}/skills/prefab-standards-reviewer/sre_regression_test.py"
+      - name: 合规回归（IC-07 20 例）
+        run: python "${{ runner.temp }}/skills/prefab-standards-reviewer/sr_ic07_compliance_test.py"
