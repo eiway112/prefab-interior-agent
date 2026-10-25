@@ -1,7 +1,8 @@
 """
 SRE Reasoner 回归测试集
 ========================
-版本：v1.12（2026-10-17：CG-20261017-006 台账 PL-200 裁定①「公寓按住宿期限分流（甲）」实施批——
+版本：v1.13（2026-10-25：Windows 控制台/管道下 run_and_report 先重配置 stdout/stderr 为 UTF-8；84 例与判据不变）
+      v1.12（2026-10-17：CG-20261017-006 台账 PL-200 裁定①「公寓按住宿期限分流（甲）」实施批——
 守卫组 TestProjectTypeAnalogy 由九例扩为十三例（79→84 例）。三支按「公寓→住宅」写死期望值的例
 同批改判（其中两支改名，旧名→新名映射见该组 docstring，映射不留第二处）：正向例改为
 「三枚高频场景非未命中＋族含 GB 55025-2022 且不含 GB 55038-2025」；相等例改为「公寓 body 相对
@@ -2044,6 +2045,13 @@ def _fingerprint(path: Path) -> dict:
 
 
 def run_and_report() -> int:
+    # Windows 控制台/管道默认 cp1252：本函数收尾会打印中文与路径，未重配置即
+    # UnicodeEncodeError（2026-10-25 GitHub windows-latest 实测：84 例全过后退出码 1）。
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     loader = unittest.TestLoader()
     suite = loader.loadTestsFromModule(sys.modules[__name__])
     runner = unittest.TextTestRunner(verbosity=2)

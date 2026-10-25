@@ -2,6 +2,13 @@
 
 本仓为技能分发面，只记录对外发布基线的变更；开发过程记录不进本仓。
 
+## v1.0.8 — 2026-10-25
+
+修复公开 CI 在 Windows 上的编码问题（不改变技能判据与数值）：
+
+- `sre_regression_test.py` 在输出前把 stdout/stderr 重配置为 UTF-8；修复 `windows-latest`（cp1252）下 84 例全过后收尾打印抛错、退出码 1。
+- CI 增 `PYTHONUTF8=1`；`prefab-standards-reviewer` 2.2.6 → 2.2.7。
+
 ## v1.0.7 — 2026-10-25
 
 架构与可复核性补齐（不改变技能内容、数值与契约）：
