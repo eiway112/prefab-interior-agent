@@ -2,6 +2,13 @@
 
 本仓为技能分发面，只记录对外发布基线的变更；开发过程记录不进本仓。
 
+## v1.1.1 — 2026-10-25
+
+修正墙面技能两处外置参考件的相对链接（不改变技能判据、数值与契约）：
+
+- `skills/prefab-wall-surface-system/references/knowledge-base.md` 与 `references/standards.md` 内的相对链接原本缺少 `../`，在子目录中点击会落到不存在的同名文件。现已分别指向技能根目录的 `reference.md` 与 `examples.md`；技能版本 2.1.7 → 2.1.8。
+- 文件总数不变（93 件）。仅 `prefab-wall-surface-system` 的 `SKILL.md`、`agents/openai.yaml` 与两个 `references/` 外置件有字节变化。
+
 ## v1.1.0 — 2026-10-25
 
 新增示例输出件与公开面路径规范化（不改变技能判据、数值与契约）：

@@ -81,5 +81,5 @@
 
 ---
 
-使用示例见 [examples.md](examples.md)。
+使用示例见 [examples.md](../examples.md)。
 
