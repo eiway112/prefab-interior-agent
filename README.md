@@ -3,7 +3,7 @@
   <h1>装配式装修智能体技能合集</h1>
   <p>15 个可加载的智能体技能：隔墙 · 墙面 · 吊顶 · 楼地面 · 厨卫 · 收纳，配套声学计算 · 机电协同 · 验收 · 规范复核</p>
   <p>
-    <img src="https://img.shields.io/badge/version-v1.1.1-orange" alt="version">
+    <img src="https://img.shields.io/badge/version-v1.1.2-orange" alt="version">
     <img src="https://img.shields.io/badge/skills-15-blue" alt="skills">
     <img src="https://img.shields.io/badge/python-3.10%2B-yellow" alt="python">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
@@ -229,16 +229,16 @@ flowchart LR
 
 本仓是**技能分发面**：只含技能本体与治理文件镜像。开发仓的过程记录、维护脚本与校验门禁（治理登记、批凭据、各道验证脚本）不随本仓分发。
 
-| 类别 | 随包（合计 93 个文件） | 不随包 |
+| 类别 | 随包（合计 95 个文件） | 不随包 |
 |---|---|---|
 | 技能本体 | 15 个技能目录，65 个文件（含 4 个 Python 件：`ace_kernel.py`、`sre_reasoner.py`、2 件测试） | — |
 | 治理文件 | `shared/` 8 件 ＋ 根级副本 2 件（`standards-index.md`、`platform-adapter-reference.md`），共 10 个文件 | 开发仓 `治理文件/` L1 源、`台账源/`、数据分类复核清单；`change-governance.md` 的 §九／§11.2；`standards-index.md` 的 §八 |
-| 根级文件 | `README.md`、`ARCHITECTURE.md`、`LICENSE`、`CHANGELOG.md`、`.gitattributes`、`assets/logo.png`、`CONTRIBUTING.md`，共 7 个文件 | — |
+| 根级文件 | `README.md`、`ARCHITECTURE.md`、`LICENSE`、`CHANGELOG.md`、`.gitattributes`、`assets/logo.png`、`CONTRIBUTING.md`、`SECURITY.md`、`CODE_OF_CONDUCT.md`，共 9 个文件 | — |
 | 工程工具 | `tools/`（安装器、自检、说明）3 件；`.github/`（CI、两类 issue 模板）3 件，共 6 个文件 | 开发仓的维护脚本、批凭据脚本、发布门禁 |
 | 示例输出 | `examples/`（索引页 1 件 ＋ 示例 4 件），共 5 个文件 | — |
 | 证据与记录 | — | `核验成果/`、`执行记录/`、`文档目录/`（含检测报告、核验报告、产品资料原件） |
 
-**计数**：65 ＋ 10 ＋ 7 ＋ 6 ＋ 5 ＝ 93 个文件；上表按文件归属划分，不重复计数。
+**计数**：65 ＋ 10 ＋ 9 ＋ 6 ＋ 5 ＝ 95 个文件；上表按文件归属划分，不重复计数。
 
 **为什么这样切**：证据与记录可能含本机环境、项目信息与开发过程；维护脚本依赖开发仓的目录结构；台账是内部追溯面。正文中出现的这些路径只作**来源指认**，在本仓不可直接打开。
 
@@ -292,6 +292,7 @@ python tools/smoke_test.py --target ~/.qoder/skills
 ```
 prefab-interior-agent/
 ├── README.md / LICENSE / CHANGELOG.md / CONTRIBUTING.md
+├── SECURITY.md / CODE_OF_CONDUCT.md
 ├── tools/                               ← install.py（安装）· smoke_test.py（自检）
 ├── .github/                             ← CI（push / PR 跑自检）· issue 模板
 ├── assets/                              ← 品牌资源
@@ -316,10 +317,10 @@ prefab-interior-agent/
 
 ## 版本与迭代策略
 
-- 本仓按语义化版本打标签发布（当前 `v1.1.1`）；引用请锁定到 tag 或具体 commit（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。公开面变更见 [CHANGELOG.md](CHANGELOG.md)。
+- 本仓按语义化版本打标签发布（当前 `v1.1.2`）；引用请锁定到 tag 或具体 commit（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。公开面变更见 [CHANGELOG.md](CHANGELOG.md)。
 - 公开面变更见 [CHANGELOG.md](CHANGELOG.md)；各技能的具体版本以 `SKILL.md` frontmatter 的 `version` 字段为准。
 - 规范标准修订、技能内容勘误以 PATCH/MINOR 发布；架构或契约级调整以 MAJOR 发布。
-- 反馈与纠错：欢迎开 Issue（使用问题、数据纠错、标准失效线索均可）；后续演进方向为单技能独立版本发布与 Releases 分发打包产物。
+- 反馈与纠错：欢迎开 Issue（使用问题、数据纠错、标准失效线索均可），维护者对数据纠错类 Issue 承诺 **3 个工作日内**响应；安全类问题请走 [SECURITY.md](SECURITY.md) 的私密通道；协作方式见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。后续演进方向为单技能独立版本发布与 Releases 分发打包产物。
 
 ## 引用与署名
 
