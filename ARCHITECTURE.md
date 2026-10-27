@@ -38,8 +38,8 @@ flowchart LR
 | 模块 | 规模 | 职责 | 公开测试 |
 |---|---|---|---|
 | `skills/acoustic-calculation-engine/ace_kernel.py` | 1,482 行 | 质量—频率诊断、MSM 模型、吻合效应；系统定量预测现阶段暂停 | 回归套件在开发仓，未随包 |
-| `skills/prefab-standards-reviewer/sre_reasoner.py` | 1,197 行 | 标准复核推理与引用分级 | `sre_regression_test.py` 84 例随包 |
-| `skills/prefab-standards-reviewer/sre_regression_test.py` | 2,115 行 | SRE 回归 | 自测 |
+| `skills/prefab-standards-reviewer/sre_reasoner.py` | 1,257 行 | 标准复核推理与引用分级 | `sre_regression_test.py` 89 例随包 |
+| `skills/prefab-standards-reviewer/sre_regression_test.py` | 2,180 行 | SRE 回归 | 自测 |
 | `skills/prefab-standards-reviewer/sr_ic07_compliance_test.py` | 175 行 | IC-07 合规回归 | 自测 |
 | `tools/install.py` | 129 行 | 安装到宿主技能目录 | CI 安装复检 |
 | `tools/smoke_test.py` | 122 行 | 包结构与引用自检 | CI 直接运行 |
@@ -58,7 +58,7 @@ flowchart LR
 
 | 层 | 内容 | 是否随包 |
 |---|---|---|
-| 公开 CI | 包结构自检、安装复检、SRE 84 例、IC-07 20 例；Ubuntu／Windows × Python 3.10／3.12 | 是（`.github/workflows/smoke.yml`） |
+| 公开 CI | 包结构自检、安装复检、SRE 89 例、IC-07 20 例；Ubuntu／Windows × Python 3.10／3.12 | 是（`.github/workflows/smoke.yml`） |
 | 开发仓门禁 | 台账一致性、数据分类、冻结基准、跨层字节一致、表结构等 22 道 | 否 |
 
 **边界**：公开面通过只证明结构一致与随包测试通过，**不证明内容正确**；数值与条文的正确性以核验记录与检测报告为准。

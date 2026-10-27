@@ -246,14 +246,14 @@ flowchart LR
 
 ## 质量与测试
 
-本仓自带 **104 例**可跑的回归测试，全部随包；安装后即可复跑：
+本仓自带 **109 例**可跑的回归测试，全部随包；安装后即可复跑：
 
 | 套件 | 例数 | 运行方式（安装后） |
 |---|---|---|
-| SRE 引擎回归 | 84 | `python <安装目录>/prefab-standards-reviewer/sre_regression_test.py` |
+| SRE 引擎回归 | 89 | `python <安装目录>/prefab-standards-reviewer/sre_regression_test.py` |
 | IC-07 合规回归 | 20 | `python <安装目录>/prefab-standards-reviewer/sr_ic07_compliance_test.py` |
 
-CI 在 Ubuntu／Windows × Python 3.10／3.12 上执行：包结构自检、安装到临时目录并复检、上述 104 例。
+CI 在 Ubuntu／Windows × Python 3.10／3.12 上执行：包结构自检、安装到临时目录并复检、上述 109 例。
 
 开发仓另有 22 道门禁（台账一致性、数据分类、冻结基准、跨层字节一致等）不随包。**公开面通过只证结构一致与随包测试通过，不证内容正确**；数值与条文的正确性以核验记录与检测报告为准。
 
