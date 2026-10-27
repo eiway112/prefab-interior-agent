@@ -1,7 +1,12 @@
 """
 SRE Reasoner —— 标准推理引擎参考实现
 =====================================
-版本：v1.10（2026-10-17，CG-20261017-006：「公寓」分流落地——§3.2 激活表与 DOMAINS 增设公寓专用行／专用族
+版本：v1.11（2026-10-27，CG-20261027-007：入口语言与规则表对齐——激活表补办公隔墙两行／办公湿区一行，
+      办公地面补 acoustic(impact)；Step 1a 增需求词归一（空气声隔声→隔声 等）并把子域取序定为
+      **显式需求词优先、构件/空间语义兜底**（楼地面/吊顶 → 显式吸声 → 墙体 → 教室/办公兜底 → 通用；
+      独立复核当场判出「墙体一律前置会使显式吸声对墙类空间不可达」，故不许把墙体支放在显式吸声之前）；
+      SPACE_ALIASES 补 办公隔墙→办公室隔墙）
+      v1.10（2026-10-17，CG-20261017-006：「公寓」分流落地——§3.2 激活表与 DOMAINS 增设公寓专用行／专用族
       （标准族＝GB 55025-2022 全文强制归属＋GB 50118-2010 旅馆档类比＋GB/T 50121-2005），取族与取序改为
       **专用键优先、类比支降为兜底**；两支降级判据由「本次是否真走类比支」改判为「该建筑类型的适用关系
       是否系参考级」，故专用行命中与类比兜底命中同判 inferred；标注换为分流三件事。闭台账 PL-200 实施面）
@@ -9,7 +14,7 @@ SRE Reasoner —— 标准推理引擎参考实现
       命中即 activation／mapping 证据置信度降 inferred ＋「未覆盖领域」载显式标注，闭台账 PL-198 ②）
       v1.8（2026-09-26，CG-20260926-010：名称取数改 SOT 优先——主表 > 登记表 > 硬编码预置，闭 PL-002）
       v1.7（2026-09-17，CG-20260917-009：复查到期仅提醒，既有依据未确认仍降级）
-依据：standards-reasoning-rules.md v1.3.0 + interface-contracts.md IC-10 v1.9.0
+依据：standards-reasoning-rules.md v1.4.0 + interface-contracts.md IC-10 v1.9.0
 
 最小接口：
     reason(project_type, space_type, location=None, system=None,
@@ -119,6 +124,12 @@ ACTIVATION_TABLE: dict[tuple[str, str], list[str]] = {
     ("住宅", "户内墙面"): ["prefab(认定)", "acceptance", "environmental"],
     ("学校", "教室墙面"): ["fire", "environmental", "acceptance"],
     ("办公", "办公墙面"): ["acceptance", "environmental", "prefab"],
+    # CG-20261027-007（A 级）：办公隔墙与办公湿区此前无行——前者退到最小集后由 Step 1a 的
+    # 「教室/办公→吸声」兜底支误配 acoustic(吸声)（返回矿棉板族），后者完全不激活防水域。
+    # 三行域集与住宅同场景同向（隔墙=声+火+验收；湿区=构造+外协防水+验收）。
+    ("办公", "办公室隔墙"): ["acoustic", "fire", "acceptance"],
+    ("办公", "会议室隔墙"): ["acoustic", "fire", "acceptance"],
+    ("办公", "厨卫湿区"): ["prefab", "waterproof(外部协同)", "acceptance"],
     # 断点6（CG-20260917-002）：厨卫湿区 是空间类型（与 SPACE_ALIASES 卫生间/厨房→厨卫湿区
     # 一致），非项目类型。原 ("厨卫湿区","墙板") 把湿区放项目槽，IC-10 项目类型枚举不含它、
     # 按契约调用永不命中，且别名路径（空间槽）此前是死的。改由空间类型维度承载后，
@@ -127,7 +138,7 @@ ACTIVATION_TABLE: dict[tuple[str, str], list[str]] = {
     ("住宅", "分户楼板"): ["acoustic(impact)", "fire", "acceptance", "prefab"],
     ("住宅", "楼地面"): ["acoustic(impact)", "acceptance", "prefab"],
     ("酒店", "客房地面"): ["acoustic(impact)", "acceptance", "prefab"],
-    ("办公", "办公地面"): ["acceptance", "prefab"],
+    ("办公", "办公地面"): ["acoustic(impact)", "acceptance", "prefab"],
     ("医院", "病房地面"): ["acoustic(impact)", "acceptance", "environmental"],
     ("学校", "教室地面"): ["acoustic(impact)", "acceptance"],
     ("医院", "手术部/洁净吊顶"): ["fire", "environmental", "acceptance", "prefab"],
@@ -156,7 +167,37 @@ ACTIVATION_TABLE: dict[tuple[str, str], list[str]] = {
 SPACE_ALIASES: dict[str, str] = {
     "卫生间": "厨卫湿区",
     "厨房": "厨卫湿区",
+    # CG-20261027-007：口语里「办公隔墙」不带「室」字，与激活表行名不同字即退最小集
+    "办公隔墙": "办公室隔墙",
 }
+
+# 性能需求词归一（CG-20261027-007，A 级）：IC-10 枚举成员为「隔声/吸声/撞击声」，
+# 而真实提问常写「空气声隔声」「楼板撞击声」「吸音」等口语形；未归一即按非声学处理，
+# 触发 Step 1a 的过滤支把声学域整体滤掉（实测：办公＋办公室＋空气声隔声 → 仅 fire/acceptance）。
+# 取序＝按 token 子串命中，一句需求可命中多个规范词（如「隔声与吸声」→ 两枚）。
+# 未命中任何 token 的需求原样保留（防火/环保/验收等非声学需求不受影响）。
+DEMAND_KEYWORDS: tuple[tuple[str, str], ...] = (
+    ("撞击", "撞击声"),
+    ("吸声", "吸声"),
+    ("吸音", "吸声"),
+    ("隔声", "隔声"),
+)
+
+
+def _normalize_demands(demands: list[str] | None) -> list[str]:
+    """把口语需求词归一为 IC-10 枚举成员，保持首次出现顺序、去重。"""
+    if not demands:
+        return []
+    out: list[str] = []
+    for raw in demands:
+        text = (raw or "").strip()
+        if not text:
+            continue
+        hits = [canon for token, canon in DEMAND_KEYWORDS if token in text]
+        for item in hits or [text]:
+            if item not in out:
+                out.append(item)
+    return out
 
 # 项目类型类比兜底表（CG-20261012-006 上线；CG-20261017-006 起降为**兜底**）
 # 键＝契约「项目类型」取值域内、其适用关系在本合集系**参考级**而非确证的建筑类型；
@@ -755,16 +796,35 @@ def _activate_domains(
     # Step 1a 性能需求裁定（仅 acoustic 子域族）
     arbitration_note = ""
     if demands:
+        canonical = _normalize_demands(demands)
+        raw_clean = [(d or "").strip() for d in demands if (d or "").strip()]
+        if canonical != raw_clean:
+            evidence_list.append(_evidence(
+                "arbitration", "standards-reasoning-rules.md §3.2 Step 1a（需求词归一）",
+                f"原始性能需求={raw_clean}",
+                f"归一后={canonical}",
+                "deterministic"
+            ))
         acoustic_demands = {"隔声", "撞击声", "吸声"}
-        has_acoustic = bool(set(demands) & acoustic_demands)
+        has_acoustic = bool(set(canonical) & acoustic_demands)
         if has_acoustic:
-            # 增补对应子域
+            # 子域取序（CG-20261027-007）：显式需求词优先、构件/空间语义兜底。
+            # 原实现把「教室/办公」兜底支排在墙体之前，致办公隔墙的隔声需求被误配为吸声族；
+            # 但墙体支若一律前置，显式「吸声」对墙类空间即不可达（教室墙面吸声族回归），
+            # 故取序＝楼地面/吊顶（构件最强）→ 显式吸声 → 墙体 → 教室/办公兜底 → 通用。
             if "楼板" in space_type or "地面" in space_type or "分户楼板" in space_type:
                 activated.add("acoustic(impact)")
                 arbitration_note = "性能需求含声学类，增补 acoustic(impact)"
             elif "吊顶" in space_type:
                 activated.add("acoustic(贡献)")
                 arbitration_note = "性能需求含声学类，增补 acoustic(贡献)"
+            elif "吸声" in canonical:
+                activated.add("acoustic(吸声)")
+                arbitration_note = "性能需求显式含吸声，增补 acoustic(吸声)"
+            elif ("隔墙" in space_type or "分户墙" in space_type
+                  or "墙体" in space_type or "墙面" in space_type):
+                activated.add("acoustic")
+                arbitration_note = "性能需求含声学类，增补 acoustic（构件为墙体，取空气声）"
             elif "教室" in space_type or "办公" in space_type:
                 activated.add("acoustic(吸声)")
                 arbitration_note = "性能需求含声学类，增补 acoustic(吸声)"

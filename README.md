@@ -3,7 +3,7 @@
   <h1>装配式装修智能体技能合集</h1>
   <p>15 个可加载的智能体技能：隔墙 · 墙面 · 吊顶 · 楼地面 · 厨卫 · 收纳，配套声学计算 · 机电协同 · 验收 · 规范复核</p>
   <p>
-    <img src="https://img.shields.io/badge/version-v1.1.2-orange" alt="version">
+    <img src="https://img.shields.io/badge/version-v1.2.0-orange" alt="version">
     <img src="https://img.shields.io/badge/skills-15-blue" alt="skills">
     <img src="https://img.shields.io/badge/python-3.10%2B-yellow" alt="python">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
@@ -317,7 +317,7 @@ prefab-interior-agent/
 
 ## 版本与迭代策略
 
-- 本仓按语义化版本打标签发布（当前 `v1.1.2`）；引用请锁定到 tag 或具体 commit（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。公开面变更见 [CHANGELOG.md](CHANGELOG.md)。
+- 本仓按语义化版本打标签发布（当前 `v1.2.0`）；引用请锁定到 tag 或具体 commit（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。公开面变更见 [CHANGELOG.md](CHANGELOG.md)。
 - 公开面变更见 [CHANGELOG.md](CHANGELOG.md)；各技能的具体版本以 `SKILL.md` frontmatter 的 `version` 字段为准。
 - 规范标准修订、技能内容勘误以 PATCH/MINOR 发布；架构或契约级调整以 MAJOR 发布。
 - 反馈与纠错：欢迎开 Issue（使用问题、数据纠错、标准失效线索均可），维护者对数据纠错类 Issue 承诺 **3 个工作日内**响应；安全类问题请走 [SECURITY.md](SECURITY.md) 的私密通道；协作方式见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。后续演进方向为单技能独立版本发布与 Releases 分发打包产物。

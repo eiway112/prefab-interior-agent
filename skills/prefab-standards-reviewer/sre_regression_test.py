@@ -981,6 +981,71 @@ class TestP0SceneExpectations(unittest.TestCase):
                              f"{no} 对照：名称含测量/评价且未被遮蔽 → 应 verification_reference（:697 活代码）")
 
 
+class TestOfficeLanguageGaps(unittest.TestCase):
+    """CG-20261027-007（A 级）：入口语言与规则表不对齐的四类实测缺口。
+
+    四例各自可独立复红：撤需求词归一、撤办公隔墙行、撤办公湿区行、撤办公地面撞击声，
+    对应的启用例即回退到「误配吸声／不激活防水／不激活撞击声」。
+    """
+
+    def _domains(self, project_type, space_type, demands=None):
+        evidence: list[dict] = []
+        activated, _ = sre_reasoner._activate_domains(
+            project_type, space_type, demands, evidence)
+        return activated, evidence
+
+    def test_airborne_demand_alias_activates_acoustic(self):
+        """「空气声隔声」须归一为「隔声」；未归一时按非声学过滤，声学域整体不激活。"""
+        activated, evidence = self._domains("办公", "办公室", ["空气声隔声"])
+        self.assertIn("acoustic", activated, "空气声隔声未归一，acoustic 未激活")
+        self.assertTrue(any("需求词归一" in e["规则来源"] for e in evidence),
+                        "归一动作须留痕，否则读者无法区分「本来就没写」与「写了但没认」")
+
+    def test_office_partition_not_mapped_to_sound_absorption(self):
+        """办公隔墙的隔声需求须落到 acoustic（空气声），且不得报「场景未命中」。
+
+        两条判据锁不同承担者：Step 1a 的墙体支负责「不误配吸声」，激活表行负责
+        「不退最小集」。撤行后域集仍对，但会多出场景未命中降级——故须同时断言后者。
+        """
+        for sp in ("办公室隔墙", "办公隔墙"):
+            activated, _ = self._domains("办公", sp, ["隔声"])
+            self.assertIn("acoustic", activated, f"{sp} 未激活 acoustic")
+            self.assertNotIn("acoustic(吸声)", activated,
+                             f"{sp} 误配吸声族（办公兜底支排在墙体之前）")
+            unc = reason("办公", sp, demands=["隔声"]).get("未覆盖领域", [])
+            self.assertFalse(any("场景未命中" in u for u in unc),
+                             f"{sp} 应命中激活表行，却报场景未命中: {unc}")
+
+    def test_explicit_absorption_on_wall_keeps_absorption_family(self):
+        """显式「吸声」不得被墙体构件语义吞掉。
+
+        取序须为「显式需求词优先、构件语义兜底」：首版把墙体支放在显式吸声支之前，
+        致教室/办公墙面的吸声需求落到空气声族（丢吸声材质标准族，独立复核当场判出）。
+        同例另锁办公墙面**仅报隔声**时仍取空气声，防修回旧序时又把隔声误配吸声。
+        """
+        activated, _ = self._domains("学校", "教室墙面", ["吸声"])
+        self.assertIn("acoustic(吸声)", activated,
+                      f"显式吸声被墙体支吞掉: {sorted(activated)}")
+        wall, _ = self._domains("办公", "办公墙面", ["隔声"])
+        self.assertIn("acoustic", wall, f"办公墙面报隔声应取空气声: {sorted(wall)}")
+        self.assertNotIn("acoustic(吸声)", wall,
+                         f"办公墙面报隔声不应落到吸声族: {sorted(wall)}")
+
+    def test_office_wet_area_activates_waterproof(self):
+        """办公卫生间须命中厨卫湿区行，产出结构化「外部协同」而非静默无防水域。"""
+        r = reason("办公", "卫生间", demands=["防水"])
+        self.assertIn("外部协同", r, "办公湿区未产出结构化「外部协同」")
+        activated, _ = self._domains("办公", "卫生间", ["防水"])
+        self.assertTrue(any(d.startswith("waterproof(") for d in activated),
+                        f"办公湿区未激活防水域: {sorted(activated)}")
+
+    def test_office_floor_activates_impact(self):
+        """办公地面须挂撞击声域（GB 50118 办公建筑楼板撞击声），此前只有验收+构造。"""
+        activated, _ = self._domains("办公", "办公地面", None)
+        self.assertIn("acoustic(impact)", activated,
+                      f"办公地面未激活撞击声域: {sorted(activated)}")
+
+
 class _SREDeterminismBase(unittest.TestCase):
     """体检用例基类：进入前对齐加载器，退出后就地回滚模块级字典。
 
