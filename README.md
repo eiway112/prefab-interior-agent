@@ -3,7 +3,7 @@
   <h1>装配式装修智能体技能合集</h1>
   <p>15 个可加载的智能体技能：隔墙 · 墙面 · 吊顶 · 楼地面 · 厨卫 · 收纳，配套声学计算 · 机电协同 · 验收 · 规范复核</p>
   <p>
-    <img src="https://img.shields.io/badge/version-v1.3.0-orange" alt="version">
+    <img src="https://img.shields.io/badge/version-v1.4.0-orange" alt="version">
     <img src="https://img.shields.io/badge/skills-15-blue" alt="skills">
     <img src="https://img.shields.io/badge/python-3.10%2B-yellow" alt="python">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
@@ -61,6 +61,7 @@ python tools/smoke_test.py --target ~/.qoder/skills   # 自检 15 技能 + 8 份
 - [公开面边界（随包 / 不随包）](#公开面边界随包--不随包)
 - [代码架构](ARCHITECTURE.md)
 - [质量与测试](#质量与测试)
+- [核验证据包](verification/)
 - [快速开始](#快速开始)
 - [目录结构](#目录结构)
 - [行尾前提（最容易踩的一条）](#行尾前提最容易踩的一条)
@@ -229,16 +230,17 @@ flowchart LR
 
 本仓是**技能分发面**：只含技能本体与治理文件镜像。开发仓的过程记录、维护脚本与校验门禁（治理登记、批凭据、各道验证脚本）不随本仓分发。
 
-| 类别 | 随包（合计 95 个文件） | 不随包 |
+| 类别 | 随包（合计 99 个文件） | 不随包 |
 |---|---|---|
-| 技能本体 | 15 个技能目录，65 个文件（含 4 个 Python 件：`ace_kernel.py`、`sre_reasoner.py`、2 件测试） | — |
+| 技能本体 | 15 个技能目录，66 个文件（含 5 个 Python 件：`ace_kernel.py`、`sre_reasoner.py`、2 件测试、验收清单导出脚本） | — |
 | 治理文件 | `shared/` 8 件 ＋ 根级副本 2 件（`standards-index.md`、`platform-adapter-reference.md`），共 10 个文件 | 开发仓 `治理文件/` L1 源、`台账源/`、数据分类复核清单；`change-governance.md` 的 §九／§11.2；`standards-index.md` 的 §八 |
 | 根级文件 | `README.md`、`ARCHITECTURE.md`、`LICENSE`、`CHANGELOG.md`、`.gitattributes`、`assets/logo.png`、`CONTRIBUTING.md`、`SECURITY.md`、`CODE_OF_CONDUCT.md`，共 9 个文件 | — |
 | 工程工具 | `tools/`（安装器、自检、说明）3 件；`.github/`（CI、两类 issue 模板）3 件，共 6 个文件 | 开发仓的维护脚本、批凭据脚本、发布门禁 |
 | 示例输出 | `examples/`（索引页 1 件 ＋ 示例 4 件），共 5 个文件 | — |
+| 核验证据 | `verification/`（说明 1 件 ＋ 指标 1 件 ＋ 核验摘要 1 件），共 3 个文件 | 核验报告原件、标准原文与扫描件、检测报告 |
 | 证据与记录 | — | `核验成果/`、`执行记录/`、`文档目录/`（含检测报告、核验报告、产品资料原件） |
 
-**计数**：65 ＋ 10 ＋ 9 ＋ 6 ＋ 5 ＝ 95 个文件；上表按文件归属划分，不重复计数。
+**计数**：66 ＋ 10 ＋ 9 ＋ 6 ＋ 5 ＋ 3 ＝ 99 个文件；上表按文件归属划分，不重复计数。
 
 **为什么这样切**：证据与记录可能含本机环境、项目信息与开发过程；维护脚本依赖开发仓的目录结构；台账是内部追溯面。正文中出现的这些路径只作**来源指认**，在本仓不可直接打开。
 
@@ -254,6 +256,8 @@ flowchart LR
 | IC-07 合规回归 | 20 | `python <安装目录>/prefab-standards-reviewer/sr_ic07_compliance_test.py` |
 
 CI 在 Ubuntu／Windows × Python 3.10／3.12 上执行：包结构自检、安装到临时目录并复检、上述 109 例。
+
+**核验证据包**：[`verification/`](verification/) 把「核了什么、依据属于哪类渠道、结论等级分布、还没核的有多少」做成了机算产物（`metrics.json` ＋ `standards-verification.md`）。它由派生器在发布时从 `skills/standards-index.md` 与包内测试件现读生成，不手写数字，也不复制标准原文与检测报告。
 
 开发仓另有 22 道门禁（台账一致性、数据分类、冻结基准、跨层字节一致等）不随包。**公开面通过只证结构一致与随包测试通过，不证内容正确**；数值与条文的正确性以核验记录与检测报告为准。
 
@@ -297,6 +301,7 @@ prefab-interior-agent/
 ├── .github/                             ← CI（push / PR 跑自检）· issue 模板
 ├── assets/                              ← 品牌资源
 ├── examples/                            ← 示例输出：四份真实应答样例 ＋ 索引
+├── verification/                        ← 核验证据包：口径说明 ＋ 聚合指标 ＋ 核验摘要（派生时生成）
 └── skills/                              ← 对外引用入口：技能本体与治理文件
     ├── prefab-*/ · acoustic-*/ · scanned-*/ · skill-qa-tester/
     │                                    ← 15 个技能目录（SKILL.md ＋ reference/examples 等）
@@ -317,7 +322,7 @@ prefab-interior-agent/
 
 ## 版本与迭代策略
 
-- 本仓按语义化版本打标签发布（当前 `v1.3.0`）；引用请锁定到 tag 或具体 commit（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。公开面变更见 [CHANGELOG.md](CHANGELOG.md)。
+- 本仓按语义化版本打标签发布（当前 `v1.4.0`）；引用请锁定到 tag 或具体 commit（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。公开面变更见 [CHANGELOG.md](CHANGELOG.md)。
 - 公开面变更见 [CHANGELOG.md](CHANGELOG.md)；各技能的具体版本以 `SKILL.md` frontmatter 的 `version` 字段为准。
 - 规范标准修订、技能内容勘误以 PATCH/MINOR 发布；架构或契约级调整以 MAJOR 发布。
 - 反馈与纠错：欢迎开 Issue（使用问题、数据纠错、标准失效线索均可），维护者对数据纠错类 Issue 承诺 **3 个工作日内**响应；安全类问题请走 [SECURITY.md](SECURITY.md) 的私密通道；协作方式见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。后续演进方向为单技能独立版本发布与 Releases 分发打包产物。

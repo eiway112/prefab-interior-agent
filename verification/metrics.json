@@ -1,0 +1,87 @@
+{
+  "schema": "verification-metrics/1",
+  "note": "由派生器在派生时现读包内文件计算，不手工维护；不含标准原文与检测报告",
+  "distribution": {
+    "files_total": 99,
+    "skills": 15,
+    "skill_files": 66,
+    "examples": 4
+  },
+  "tests": {
+    "sre_regression": {
+      "path": "skills/prefab-standards-reviewer/sre_regression_test.py",
+      "test_methods": 89,
+      "sha256_12": "41b3c49863bf"
+    },
+    "ic07_compliance": {
+      "path": "skills/prefab-standards-reviewer/sr_ic07_compliance_test.py",
+      "test_methods": 20,
+      "sha256_12": "e3d4fe8b8dcf"
+    },
+    "total": 109,
+    "counting": "静态计数测试文件中声明的 test_ 方法；是否通过以 CI 或本地实跑为准"
+  },
+  "standards": {
+    "source": {
+      "path": "skills/standards-index.md",
+      "sha256_12": "43fed1e14b3d"
+    },
+    "main_rows": 93,
+    "by_level": {
+      "强制性国标（红线标准）": 24,
+      "推荐性国标／行业标准／技术导则": 32,
+      "图集（构造做法参考）": 5,
+      "产品标准（验证判据参考）": 28,
+      "其他相关标准": 4,
+      "其他": 0
+    },
+    "by_status": {
+      "现行有效": 90,
+      "被部分替代": 2,
+      "已废止": 1,
+      "即将实施": 0,
+      "过渡期": 0,
+      "待核验": 0,
+      "无法核验": 0,
+      "到期需复核": 0
+    },
+    "verification_state": {
+      "已官方核验": 29,
+      "待核验": 2,
+      "到期需复核": 0,
+      "无法核验": 0,
+      "其他（未归入枚举）": 6
+    },
+    "verification_records": {
+      "state_layered": 37,
+      "conclusion_only": 52
+    },
+    "source_types": {
+      "标准信息平台": 21,
+      "全文公开系统": 15,
+      "部门公告": 43,
+      "正式出版物": 30,
+      "用户提供件": 10,
+      "来源码（S1—S4）": 6,
+      "其他／未归类": 8
+    },
+    "anchors": 13,
+    "pending_supplement_rows": 19
+  },
+  "ci": {
+    "workflow": ".github/workflows/smoke.yml",
+    "os": [
+      "ubuntu-latest",
+      "windows-latest"
+    ],
+    "python": [
+      "3.10",
+      "3.12"
+    ],
+    "combos": 4
+  },
+  "releases": {
+    "count": 17,
+    "latest": "v1.4.0"
+  }
+}
