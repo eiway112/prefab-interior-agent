@@ -41,8 +41,8 @@ flowchart LR
 | `skills/prefab-standards-reviewer/sre_reasoner.py` | 1,257 行 | 标准复核推理与引用分级 | `sre_regression_test.py` 89 例随包 |
 | `skills/prefab-standards-reviewer/sre_regression_test.py` | 2,180 行 | SRE 回归 | 自测 |
 | `skills/prefab-standards-reviewer/sr_ic07_compliance_test.py` | 175 行 | IC-07 合规回归 | 自测 |
-| `tools/install.py` | 129 行 | 安装到宿主技能目录 | CI 安装复检 |
-| `tools/smoke_test.py` | 122 行 | 包结构与引用自检 | CI 直接运行 |
+| `tools/install.py` | 以源码现读为准 | 受管更新、内容核对、备份与恢复 | 开发仓 `public_install_test.py`；CI 安装复检 |
+| `tools/smoke_test.py` | 以源码现读为准 | 包结构、引用与安装内容逐字节核对 | CI 直接运行 |
 
 全部只用 Python 标准库。技能正文是 Markdown＋YAML frontmatter，不需要编译。
 

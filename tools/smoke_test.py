@@ -22,22 +22,14 @@ import re
 import sys
 from pathlib import Path
 
+from install import SHARED_EXPECTED, check as check_install
+
 for stream in (sys.stdout, sys.stderr):
     if hasattr(stream, "reconfigure"):
         stream.reconfigure(encoding="utf-8")
 
 REPO = Path(__file__).resolve().parents[1]
 SRC = REPO / "skills"
-SHARED_EXPECTED = [
-    "change-governance.md",
-    "data-classification.md",
-    "glossary.md",
-    "interface-contracts.md",
-    "platform-adapter-reference.md",
-    "redlines-registry.md",
-    "standards-index.md",
-    "standards-reasoning-rules.md",
-]
 SHARED_REF = re.compile(r"\.\./shared/([A-Za-z0-9._\-]+)")
 
 
@@ -68,6 +60,8 @@ def main() -> int:
     skill_dirs = sorted(p for p in SRC.iterdir() if p.is_dir() and p.name != "shared")
     with_skill = [p for p in skill_dirs if (p / "SKILL.md").is_file()]
     notes.append(f"技能目录 {len(skill_dirs)} 个，其中带 SKILL.md {len(with_skill)} 个")
+    if not with_skill:
+        failures.append("技能包为空：没有可加载的技能")
 
     for d in skill_dirs:
         if not (d / "SKILL.md").is_file():
@@ -99,13 +93,8 @@ def main() -> int:
         if not target.is_dir():
             failures.append(f"安装目录不存在：{target}")
         else:
-            for d in with_skill:
-                if not (target / d.name / "SKILL.md").is_file():
-                    failures.append(f"安装目录缺 {d.name}/SKILL.md")
-            for name in SHARED_EXPECTED:
-                if not (target / "shared" / name).is_file():
-                    failures.append(f"安装目录缺 shared/{name}")
-            notes.append(f"安装目录检查：{target}")
+            failures.extend(check_install(target, SRC))
+            notes.append(f"安装目录逐字节核对：{target}")
 
     for n in notes:
         print(f"[smoke] {n}")
