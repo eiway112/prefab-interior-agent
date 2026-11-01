@@ -24,7 +24,7 @@
   "standards": {
     "source": {
       "path": "skills/standards-index.md",
-      "sha256_12": "43fed1e14b3d"
+      "sha256_12": "37ad07cfb7a1"
     },
     "main_rows": 93,
     "by_level": {
@@ -46,22 +46,22 @@
       "到期需复核": 0
     },
     "verification_state": {
-      "已官方核验": 29,
+      "已官方核验": 31,
       "待核验": 2,
       "到期需复核": 0,
       "无法核验": 0,
-      "其他（未归入枚举）": 6
+      "其他（未归入枚举）": 8
     },
     "verification_records": {
-      "state_layered": 37,
-      "conclusion_only": 52
+      "state_layered": 41,
+      "conclusion_only": 55
     },
     "source_types": {
       "标准信息平台": 21,
       "全文公开系统": 15,
-      "部门公告": 43,
-      "正式出版物": 30,
-      "用户提供件": 10,
+      "部门公告": 47,
+      "正式出版物": 36,
+      "用户提供件": 15,
       "来源码（S1—S4）": 6,
       "其他／未归类": 8
     },
@@ -81,7 +81,7 @@
     "combos": 4
   },
   "releases": {
-    "count": 18,
-    "latest": "v1.5.0"
+    "count": 19,
+    "latest": "v1.5.1"
   }
 }
