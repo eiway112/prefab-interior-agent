@@ -573,7 +573,7 @@
 
 > **计算引擎承载形态（v1.13.0，CG-20261017-007）**：本节三枚契约（IC-03／IC-08／IC-09）的被调方 `acoustic-calculation-engine` 自 2026-10-17 起提供可执行程序内核`~/.qoder/skills/acoustic-calculation-engine/ace_kernel.py`（Python 3.8+，仅标准库），入口 `compute_request(ic_id, request)`：正常路径返回本节响应字段约束表所列结构，降级路径返回`{"降级": …, "说明": …}` 结构且不抛出，串面与本件 §6.1／§6.2 逐字对齐。内核的字段声明（`IC_FIELD_SPECS`）与本节字段约束表、JSON Schema 三方对撞由 `维护脚本/ace_regression_test.py` 的 TestInterfaceFieldConservation 常驻校验；**新增／改名／改必填档三枚契约字段者须同批跟该表与Schema，否则该守卫转红**。
 
-> **工程定量出口暂停（v1.14.0，CG-20261017-008／台账 PL-229）**：本节三枚契约的合法请求当前一律返回诊断型降级 payload，键集＝`降级`（"超出模型适用范围"）／`说明`／`原因代码`（"PL-229"）／`请求评价量`（原样回显，不得换标签）／`物理诊断`（质量、有效拓扑下的 Hz 级 f₀／耦合模态、单板 fc、浮筑 f₀；IC-09 不给 MSM f₀）／`风险识别`（形制同各响应 Schema 的 `风险识别` 节点）／`关键假设说明`／`适用边界声明`／`超出范围提示`／`不可建模因素`／`人工评估建议`，**不含 `计算结果`、频段 dB 与精度承诺**。上列响应 Schema 保留为恢复定量出口时的形制，恢复前提（匹配可溯源实测，或适用域明确且经独立验证并完成误差／区间覆盖评估的模型）与判据单源＝ACE `reference.md`「现行工程输出边界（PL-229）」；内核侧承担者＝`ace_kernel.py` 的 `VALIDATED_QUANT_ROUTES`（空集即暂停）与红线段 PL-229 断言，回归承担者＝`维护脚本/ace_regression_test.py` 的 TestKernelResponseShape／TestKernelRedlines。
+> **工程定量出口暂停（v1.14.0，CG-20261017-008／台账 PL-229）**：本节三枚契约的合法请求当前一律返回诊断型降级 payload，键集＝`降级`（"超出模型适用范围"）／`说明`／`原因代码`（"PL-229"）／`请求评价量`（原样回显，不得换标签）／`物理诊断`（质量、有效拓扑下的 Hz 级 f₀／耦合模态、单板 fc、浮筑 f₀；IC-09 不给 MSM f₀）／`风险识别`（形制同各响应 Schema 的 `风险识别` 节点）／`关键假设说明`／`适用边界声明`／`超出范围提示`／`不可建模因素`／`人工评估建议`，**不含 `计算结果`、频段 dB 与精度承诺**。上列响应 Schema 保留为恢复定量出口时的形制；恢复前提与定量数据的分层取证判据**不在本件重述**（重述即成本件第二事实源，原字面已随 CG-20261103-005 收拢为指针），判据单源＝ACE `reference.md`「现行工程输出边界（PL-229）」；内核侧承担者＝`ace_kernel.py` 的 `VALIDATED_QUANT_ROUTES`（空集即暂停）与红线段 PL-229 断言，回归承担者＝`维护脚本/ace_regression_test.py` 的 TestKernelResponseShape／TestKernelRedlines。
 
 #### IC-03：隔墙技能 → 隔声计算引擎
 

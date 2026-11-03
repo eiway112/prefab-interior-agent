@@ -3,7 +3,7 @@
   <h1>装配式装修智能体技能合集</h1>
   <p>把一个垂直领域的专家判据，做成智能体可加载、可审计、可复用的知识资产</p>
   <p>
-    <img src="https://img.shields.io/badge/version-v1.5.3-orange" alt="version">
+    <img src="https://img.shields.io/badge/version-v1.5.4-orange" alt="version">
     <img src="https://img.shields.io/badge/skills-15-blue" alt="skills">
     <img src="https://img.shields.io/badge/python-3.10%2B-yellow" alt="python">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
@@ -221,7 +221,7 @@ flowchart LR
 | 有匹配且可溯源的检测报告 | 可引用报告原评价量，并记录报告编号与匹配核对 | 以同材料或相似构造推定同构造；以 STC 当 Rw；把报告值外推为变体性能 |
 | 需要工程结论 | 以 CMA/CNAS 检测报告和现行标准为准 | 以模型预测替代检测或验收 |
 
-为什么宁可暂停：接口契约里的示例区间与内核复算出的区间，在空气声、撞击声、侧向传声三面上都对不齐，而判定「哪一侧对」需要**同构造的 CMA/CNAS 检测报告**——该外部真值尚未取得。在没有真值的条件下继续输出 dB，等于把一个未对齐的差值交给工地。模型本体（M1—M7：质量定律、Cremer 吻合效应、双叶墙 MSM 共振、空腔增益、撞击声改善量、声桥/缝隙修正、检测报告基准校准）与可执行内核 `ace_kernel.py` 随包保留，供研究复算与验证后恢复。
+为什么宁可暂停：接口契约里的示例区间与内核复算出的区间，在空气声、撞击声、侧向传声三面上都对不齐，而判定「哪一侧对」需要**同构造的 CMA/CNAS 检测报告**——该外部真值尚未取得（「同构造」按腔深、板层、填充与安装边界逐参数一致判；本版仓内新登记的三枚报告在该判据下均不构成这一算例的同构造真值，逐枚构造指纹见 [`skills/acoustic-calculation-engine/reference.md`](skills/acoustic-calculation-engine/reference.md) ② 层条）。在没有真值的条件下继续输出 dB，等于把一个未对齐的差值交给工地。模型本体（M1—M7：质量定律、Cremer 吻合效应、双叶墙 MSM 共振、空腔增益、撞击声改善量、声桥/缝隙修正、检测报告基准校准）与可执行内核 `ace_kernel.py` 随包保留，供研究复算与验证后恢复。
 
 ## 治理与证据体系
 
@@ -375,7 +375,7 @@ prefab-interior-agent/
 
 ## 版本与迭代策略
 
-- 本仓按语义化版本打标签发布（当前 `v1.5.3`）；引用请**锁定到 tag 或具体 commit**（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。
+- 本仓按语义化版本打标签发布（当前 `v1.5.4`）；引用请**锁定到 tag 或具体 commit**（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。
 - 公开面变更见 [CHANGELOG.md](CHANGELOG.md)；各技能的具体版本以 `SKILL.md` frontmatter 的 `version` 字段为准。
 - 规范标准修订、技能内容勘误以 PATCH/MINOR 发布；架构或契约级调整以 MAJOR 发布。
 - **反馈与纠错**：欢迎开 Issue（使用问题、数据纠错、标准失效线索均可）。数据纠错类 Issue 承诺 **3 个工作日内**响应——这类 Issue 是本仓最有价值的外部输入，因为标准会修订、本仓会漏。安全类问题请走 [SECURITY.md](SECURITY.md) 的私密通道；协作方式见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
