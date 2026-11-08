@@ -16,7 +16,7 @@
     "ic07_compliance": {
       "path": "skills/prefab-standards-reviewer/sr_ic07_compliance_test.py",
       "test_methods": 20,
-      "sha256_12": "e3d4fe8b8dcf"
+      "sha256_12": "2838cd8aad4a"
     },
     "total": 109,
     "counting": "静态计数测试文件中声明的 test_ 方法；是否通过以 CI 或本地实跑为准"
@@ -24,7 +24,7 @@
   "standards": {
     "source": {
       "path": "skills/standards-index.md",
-      "sha256_12": "53f4c40baea9"
+      "sha256_12": "21616a3aefa9"
     },
     "main_rows": 93,
     "by_level": {
@@ -54,7 +54,7 @@
     },
     "verification_records": {
       "state_layered": 50,
-      "conclusion_only": 56
+      "conclusion_only": 57
     },
     "source_types": {
       "标准信息平台": 23,
@@ -62,7 +62,7 @@
       "部门公告": 50,
       "正式出版物": 42,
       "用户提供件": 16,
-      "来源码（S1—S4）": 6,
+      "来源码（S1—S4）": 7,
       "其他／未归类": 10
     },
     "anchors": 13,
@@ -81,7 +81,7 @@
     "combos": 4
   },
   "releases": {
-    "count": 26,
-    "latest": "v1.5.8"
+    "count": 27,
+    "latest": "v1.6.0"
   }
 }
