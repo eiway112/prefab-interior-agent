@@ -3,7 +3,7 @@
   <h1>装配式装修智能体技能合集</h1>
   <p>把一个垂直领域的专家判据，做成智能体可加载、可审计、可复用的知识资产</p>
   <p>
-    <img src="https://img.shields.io/badge/version-v1.6.0-orange" alt="version">
+    <img src="https://img.shields.io/badge/version-v1.6.1-orange" alt="version">
     <img src="https://img.shields.io/badge/skills-15-blue" alt="skills">
     <img src="https://img.shields.io/badge/python-3.10%2B-yellow" alt="python">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
@@ -36,9 +36,9 @@
 - 闭水试验合格后方可封板
 ```
 
-一个红线编号、一条带核验日期的国标条文出处、一个数值属于哪一档来源、一句明确的「不可直接实施」，以及改对了要做什么。**多数通用大模型在这里也会给你一段读起来很顺的做法——区别是它没有红线编号、没有条文出处，也没有档位。**
+这段是技能输出的**内部可追溯形态**：红线编号、条文出处、来源档位都在，便于逐条回溯。**面向甲方的答复默认不展示这些内部编号**（v1.6.0 起：PL-／IC-／R-P／S1—S4 等编号只用于技能间协作与文档，依据改写为对象名，如「隔声定量暂停口径」），结论、依据与边界不变。**多数通用大模型在这里也会给你一段读起来很顺的做法——区别是它拿不出可回溯的出处，也说不清自己哪一步不能给。**
 
-隔声维度上它甚至更不讨喜——直接不给数。同一份方案验证输出里，那一行逐字长这样（[`examples/01`](examples/01-partition-wall-verification.md)）：
+隔声维度上它甚至更不讨喜——直接不给数。同一份方案验证输出的内部可追溯形态里，那一行逐字长这样（[`examples/01`](examples/01-partition-wall-verification.md)）：
 
 ```markdown
 | 隔声性能 | DnT,w+C≥50 dB | 历史演示：Rw+C≈52-57 dB（估算，不可引用） | 🔲（PL-229 暂停期不判估算） | 无经验证定量预测；按 §3.A 衰减 5-10 dB 折算现场下限不足，须现场检测 |
@@ -73,6 +73,7 @@ python tools/smoke_test.py --target ~/.qoder/skills  # 自检：15 技能 + 8 �
 | 维度 | 现状 | 出处 |
 |---|---|---|
 | 技能 | 15 个（六大部品系统 + 计算/协同/验收/复核专项） | [技能矩阵](#技能矩阵15-个) |
+| 作答纪律 | 定值先答不抛回；对外提问 ≤3 个（每个写明改变什么结论）；不可定量时只降数值不拒答；面向甲方不出现内部编号与路由码 | 各技能 `SKILL.md`「应答原则」 |
 | 加载形态 | 通用 `SKILL.md` 约定（YAML frontmatter ＋ Markdown 正文），不绑定单一平台 | 各技能目录 |
 | 治理文件 | 8 份（标准索引、接口契约、红线注册表、术语表、数据分级、变更治理等） | `skills/shared/` |
 | 标准收录 | 93 条（现读），逐条带效力状态与核验状态 | [`skills/standards-index.md`](skills/standards-index.md) |
@@ -375,7 +376,7 @@ prefab-interior-agent/
 
 ## 版本与迭代策略
 
-- 本仓按语义化版本打标签发布（当前 `v1.6.0`）；引用请**锁定到 tag 或具体 commit**（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。
+- 本仓按语义化版本打标签发布（当前 `v1.6.1`）；引用请**锁定到 tag 或具体 commit**（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。
 - 公开面变更见 [CHANGELOG.md](CHANGELOG.md)；各技能的具体版本以 `SKILL.md` frontmatter 的 `version` 字段为准。
 - 规范标准修订、技能内容勘误以 PATCH/MINOR 发布；架构或契约级调整以 MAJOR 发布。
 - **反馈与纠错**：欢迎开 Issue（使用问题、数据纠错、标准失效线索均可）。数据纠错类 Issue 承诺 **3 个工作日内**响应——这类 Issue 是本仓最有价值的外部输入，因为标准会修订、本仓会漏。安全类问题请走 [SECURITY.md](SECURITY.md) 的私密通道；协作方式见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
