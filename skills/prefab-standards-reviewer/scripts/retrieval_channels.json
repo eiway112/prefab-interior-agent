@@ -1,0 +1,114 @@
+{
+  "schema": "retrieval-channels/v1",
+  "generated_at": "2026-11-10",
+  "note": "通道注册表：只登记可复现的端点与已实测的官方体系件；新增源须先按 核验成果/ 的实测口径验证字节与抽行，再入表。",
+  "ttl_days": {
+    "hit": 90,
+    "miss": 7
+  },
+  "budgets": {
+    "note": "分通道预算档。socket_s＝单次 socket 操作超时；wall_s＝该通道整段墙钟（各请求共享剩余额度，含重试）。分档依据＝2026-11-10 单枚实测（小接口 0.15—4.91 s／次、CNIS 427 ms；山东 PDF 27.84 s＋抽行≈28.3 s、新疆 2.68 s；北京 16.4 MB 30 s 只下 3.2 MB）＋2026-11-11 墙钟探针（timeout=2 对 16 s 慢速响应仍 ok=True、墙钟 15.75 s，故必须另设墙钟闸）。",
+    "default": {
+      "socket_s": 8,
+      "wall_s": 12
+    },
+    "gov_compilation": {
+      "socket_s": 20,
+      "wall_s": 35
+    },
+    "large_carrier_bytes": 8388608,
+    "retry_attempts": 1
+  },
+  "channels": {
+    "samr": {
+      "endpoint": "https://std.samr.gov.cn/gb/search/gbQueryPage?searchText={q}",
+      "referer": "https://std.samr.gov.cn/gb/search",
+      "health_control": "9978",
+      "family_controls": {
+        "GB": "9978",
+        "JGJ": "491",
+        "JC": "985",
+        "JG": "487"
+      },
+      "boundary": "只吃裸数字且只返 GB；JGJ/JC/JG 族控制枚返 0 时判库不覆盖，不判标准不存在。"
+    },
+    "openstd": {
+      "endpoint": "https://openstd.samr.gov.cn/bzgk/std/std_list?p.p1=0&p.p90=circulation_date&p.p91=desc&p.p2={q}",
+      "referer": "https://openstd.samr.gov.cn/bzgk/std/std_list",
+      "health_control": "9775",
+      "family_controls": {
+        "GB": "9775",
+        "JGJ": "491",
+        "JC": "985",
+        "JG": "487"
+      },
+      "boundary": "GB 库；工程建设行业标准不在其内。"
+    },
+    "hbba": {
+      "endpoint": "https://hbba.sacinfo.org.cn/stdQueryList",
+      "referer": "https://hbba.sacinfo.org.cn/stdList",
+      "health_control": "JC/T 985",
+      "family_controls": {
+        "JC": "JC/T 985",
+        "JG": "JG/T 487",
+        "JGJ": "JGJ/T 491"
+      },
+      "ghost_suffix": "-2099",
+      "boundary": "收 JC/JG 行业产品标准；JGJ 工程建设标准控制枚返 0 时判库不覆盖。返回体数据键为 records。"
+    },
+    "mohurd": {
+      "search": "https://www.mohurd.gov.cn/api-gateway/jpaas-jsearch-web-server/interface/search/info?websiteid=&q={q}&pg=20&cateid=09a0b99112dc40208e386f58a5f2ce28&serviceId=e2f3058e2a3b4f8abc93eb76e739e3e7&p=1",
+      "search_referer": "https://www.mohurd.gov.cn/api-gateway/jpaas-jsearch-web-server/search?serviceId=e2f3058e2a3b4f8abc93eb76e739e3e7&cateid=09a0b99112dc40208e386f58a5f2ce28&pg=20&q=test",
+      "form": "https://www.mohurd.gov.cn/api-gateway/jpaas-publish-server/front/page/build/unit",
+      "form_referer": "https://www.mohurd.gov.cn/gongkai/zc/wjk/index.html",
+      "form_params": {
+        "webId": "86ca573ec4df405db627fdc2493677f3",
+        "pageId": "vhiC3JxmPC8o7Lqg4Jw0E",
+        "parseType": "bulidstatic",
+        "pageType": "column",
+        "tagId": "内容1",
+        "tplSetId": "fc259c381af3496d85e61997ea7771cb",
+        "unitUrl": "/api-gateway/jpaas-publish-server/front/page/build/unit"
+      },
+      "health_controls": {
+        "search": "建筑环境通用规范",
+        "form": "建筑环境通用规范",
+        "file_no": "1292"
+      },
+      "boundary": "发布机关自有端点；控制枚通过而目标枚不在检索/表单索引内时，记 record_missing（不可判），不读作标准不存在。"
+    },
+    "gov_compilation": {
+      "sources": [
+        {
+          "id": "sd-2025",
+          "name": "山东省工程建设安全标准体系（2025年）",
+          "url": "http://zjt.shandong.gov.cn/module/download/downfile.jsp?classid=0&filename=b24b16bd00a5420c8dfa68a274aae6b1.pdf",
+          "bytes": 1620134,
+          "sha256": "791e73f18338141155411e6f513dc31cfc9fecf8c94c9420f85af191da571288",
+          "doc_date": "2025-10",
+          "level": "S2",
+          "page_hint": "p28"
+        },
+        {
+          "id": "xj-2023",
+          "name": "住房和城乡建设标准体系框架（新疆，2023-11）",
+          "url": "https://zjt.xinjiang.gov.cn/xjzjt/c114248/202312/b86ed50a759d4d95891f4a5f2f77affe/files/%E3%80%8A%E4%BD%8F%E6%88%BF%E5%92%8C%E5%9F%8E%E4%B9%A1%E5%BB%BA%E8%AE%BE%E6%A0%87%E5%87%86%E4%BD%93%E7%B3%BB%E6%A1%86%E6%9E%B6%E3%80%8B%E4%BF%AE%E8%AE%A2%E7%89%88%E5%BE%81%E6%B1%82%E6%84%8F%E8%A7%81%E7%A8%BF.pdf",
+          "bytes": 1876631,
+          "sha256": "e559dddead9af37660e9b25bcbc08036d06d7ffa974a84ea25601f47187f2ddb",
+          "doc_date": "2023-11",
+          "level": "S2-",
+          "page_hint": "p50"
+        }
+      ],
+      "boundary": "省级政府标准体系件是官方二级汇编：给编号+名称+类别+实施日期/状态，不给条文，也不是发布机关原始公告。字节或 sha256 不符即判源失效，不引用。"
+    }
+  },
+  "routes": {
+    "GB": ["openstd", "samr", "gov_compilation", "mohurd", "hbba"],
+    "JGJ": ["gov_compilation", "mohurd", "hbba", "samr", "openstd"],
+    "JC": ["hbba", "gov_compilation", "mohurd"],
+    "JG": ["hbba", "gov_compilation", "mohurd"],
+    "DB": ["gov_compilation", "mohurd"],
+    "DBJ": ["gov_compilation", "mohurd"]
+  }
+}

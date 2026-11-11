@@ -1,7 +1,7 @@
 ---
 name: prefab-interior-systems-orchestrator
 description: 装配式装修技能合集总入口与路由协调器。用于识别用户意图、选择隔墙、墙面、吊顶、楼地面、厨卫、收纳、机电集成、验收清单、场景适用标准查询（要用哪些标准／标准清单／选标准）、标准复核或技能 QA 等专项技能，并组织多技能协同输出。作为协调Agent管理全局约束、分发方案校验任务、协调整改循环和跨部品集成校验。适用于用户提出装配式装修综合方案、部品系统协同、技能合集导航、跨专业冲突协调、多角色任务分派或需要方案独立校验时。
-version: 2.5.20
+version: 2.5.21
 ---
 
 # 装配式装修技能合集总入口
@@ -503,23 +503,27 @@ version: 2.5.20
 ## 风险与待确认
 ```
 
-## 交付前的标准引用核验（全场景出口，CG-20261110-005）
+## 交付前的标准引用核验（全场景出口，CG-20261110-005；工具随包 CG-20261111-001）
 
-凡交付物出现标准编号（GB／GB/T／JGJ／JGJ/T／JC／JG／CJJ／DB 族），**交付前必须跑引用核验，红件不得交付**。判据＝`维护脚本/citation_ledger.py` 四轴：L1 身份（索引外须声明）／L2 版本（年号须与索引现版一致，已废止即红）／L3 前缀（GB 与 GB/T 是两族，不可互替）／L4 双向覆盖（源文件有而交付物无＝漏引；交付物有而源文件无＝归因错误）。
+凡交付物出现标准编号（GB／GB/T／JGJ／JGJ/T／JC／JG／CJJ／DB 族），**交付前必须跑引用核验，红件不得交付**。判据＝`prefab-standards-reviewer/scripts/citation_ledger.py` 四轴：L1 身份（索引外须声明）／L2 版本（年号须与索引现版一致，已废止即红）／L3 前缀（GB 与 GB/T 是两族，不可互替）／L4 双向覆盖（源文件有而交付物无＝漏引；交付物有而源文件无＝归因错误）。
+
+> **工具位置与 cwd**：本节工具**随技能包交付**，住 `prefab-standards-reviewer/scripts/`（技能根＝加载本 SKILL.md 那一层目录的上一级；Qoder 默认 `~/.qoder/skills`）。下列命令以**技能根为 cwd**；cwd 不在技能根时把该前缀换成绝对路径即可——工具按自身文件位置解析索引与证据卡，**不依赖 cwd**。开发仓内维护者另走 `AGENTS.md` 门禁表（源在 `维护脚本/`），不在本节范围。
 
 | 交付场景 | 必跑命令 | 档位 |
 |---|---|---|
-| 技术答疑（答复正文） | `python -B 维护脚本/answer_to_case.py --exit-gate 答复.md` | 索引外降黄 |
+| 技术答疑（答复正文） | `python -B prefab-standards-reviewer/scripts/answer_to_case.py --exit-gate 答复.md` | 索引外降黄 |
 | 项目相关交付（有源文件） | 同上，追加 `--standards-sources 项目抽文.txt` | 归因错误／漏引即红 |
-| 选型结论与缺件单（JSON 交付件） | `python -B 维护脚本/citation_ledger.py extract 交付件.json --out 台账.json`，再 `verify 台账.json`（有源文件则加 `--sources`） | 索引外降黄；有源文件时归因／漏引即红 |
-| 外部文件评审、对外材料 | `python -B 维护脚本/citation_ledger.py extract 交付物 … --out 台账.json`，再 `verify 台账.json --sources 源文件…` | 索引外即红 |
+| 选型结论与缺件单（JSON 交付件） | `python -B prefab-standards-reviewer/scripts/citation_ledger.py extract 交付件.json --out 台账.json`，再 `verify 台账.json`（有源文件则加 `--sources`） | 索引外降黄；有源文件时归因／漏引即红 |
+| 外部文件评审、对外材料 | `python -B prefab-standards-reviewer/scripts/citation_ledger.py extract 交付物 … --out 台账.json`，再 `verify 台账.json --sources 源文件…` | 索引外即红 |
 | 治理批（改仓） | 见 `AGENTS.md` 验收门禁表 | 仓内门禁 |
 
 - **提及 ≠ 依据**：行内含「替代／废止／旧版／不得／待核／原引用」者判为提及，只黄不红——正确的否定句（如「旧版已被替代，不得作依据」）不得被打成错。
 - **零引用**：本件不含标准号时跳过核验，但不得据此声称「已核验」。
 - **台账随件**：评审与对外材料的台账与交付物一并留档（台账记输入 sha256，源文清理后仍可复现）。
 - **未核清单**：核验结果中的黄项须在交付物内显式披露（未核清单或「源文件外依据」），不得静默丢弃。
-- 工具不可用（非开发项目根）时按 IC-11 句式标注「标准引用核验未执行，相关引用维持待核验」，不得以自述「已核对」替代。
+- **索引外引用的证据卡补证**：出口闸默认对「索引外且未声明」的引用查证据卡（`prefab-standards-reviewer/evidence/`），打印五计数（索引内／证据卡有效／过期／无卡／已声明外源）；**只读缓存、不联网**，判定不变。
+- **联网取真须显式开**：加 `--fetch-missing` 才对无卡／过期项联网取真并写证据卡（默认关）。预算分通道（小接口墙钟 12 s／省级体系件 PDF 35 s／>8 MB 大载体缺省不取），超时落「不可判」而非「该库不收」；未取到项按 miss-TTL 7 天改日再取。取真访问的域名逐条在册于 `prefab-standards-reviewer/scripts/retrieval_channels.json`。
+- 工具确实不在场（该文件不存在）时按 IC-11 句式标注「标准引用核验未执行，相关引用维持待核验」，不得以自述「已核对」替代，也不得以工具零命中充当已核验。
 
 ## 共享参考
 

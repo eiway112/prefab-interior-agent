@@ -1,0 +1,232 @@
+{
+  "schema": "standard-evidence-card/v1",
+  "standard_id": "JGJ/T 398-2017",
+  "prefix_family": "JGJ/T",
+  "number_core": "398",
+  "name_query": "装配式住宅建筑设计标准",
+  "canonical_name": "装配式住宅建筑设计标准",
+  "year": "2017",
+  "status": "现行（2026-11-10 CNIS 现读；省级标准体系编制时点作旁证）",
+  "issued_date": "2017-10-30",
+  "implemented_date": "2018-06-01",
+  "field_grades": {
+    "canonical_name": "S1",
+    "year": "S1",
+    "status": "S2（2026-11-10 现读）",
+    "implemented_date": "S1",
+    "issued_date": "S1",
+    "announcement_no": "S1",
+    "standard_id": "S1",
+    "clause": "S1"
+  },
+  "identity_sources": [
+    {
+      "channel": "山东省工程建设安全标准体系（2025年）",
+      "level": "S2",
+      "carrier": "http://zjt.shandong.gov.cn/module/download/downfile.jsp?classid=0&filename=b24b16bd00a5420c8dfa68a274aae6b1.pdf",
+      "bytes": 1620134,
+      "sha256": "791e73f18338141155411e6f513dc31cfc9fecf8c94c9420f85af191da571288",
+      "page": "p28",
+      "row": "0201C-40｜装配式住宅建筑设计标准｜JGJ/T 398-2017｜行业标准｜2018/06/01｜现行｜68｜0201C-41",
+      "parsed": {
+        "code": "JGJ/T 398-2017",
+        "name": "装配式住宅建筑设计标准",
+        "category": "行业标准",
+        "implemented_date": "2018-06-01",
+        "status": "现行",
+        "row": "0201C-40｜装配式住宅建筑设计标准｜JGJ/T 398-2017｜行业标准｜2018/06/01｜现行｜68｜0201C-41",
+        "doc_date": "2025-10"
+      },
+      "fetched_at": "2026-11-10T20:26:19+08:00",
+      "elapsed_ms": 26863.0
+    },
+    {
+      "channel": "住房和城乡建设标准体系框架（新疆，2023-11）",
+      "level": "S2-",
+      "carrier": "https://zjt.xinjiang.gov.cn/xjzjt/c114248/202312/b86ed50a759d4d95891f4a5f2f77affe/files/%E3%80%8A%E4%BD%8F%E6%88%BF%E5%92%8C%E5%9F%8E%E4%B9%A1%E5%BB%BA%E8%AE%BE%E6%A0%87%E5%87%86%E4%BD%93%E7%B3%BB%E6%A1%86%E6%9E%B6%E3%80%8B%E4%BF%AE%E8%AE%A2%E7%89%88%E5%BE%81%E6%B1%82%E6%84%8F%E8%A7%81%E7%A8%BF.pdf",
+      "bytes": 1876631,
+      "sha256": "e559dddead9af37660e9b25bcbc08036d06d7ffa974a84ea25601f47187f2ddb",
+      "page": "p50",
+      "row": "[01].6.1-10｜装配式住宅建筑设计标准｜JGJ/T 398-2017｜√｜行标｜[01].6.1-11｜装配式劲性柱混合梁框架结构｜技术规程",
+      "parsed": {
+        "code": "JGJ/T 398-2017",
+        "name": "装配式住宅建筑设计标准",
+        "category": "行标",
+        "implemented_date": null,
+        "status": "现行（√）",
+        "row": "[01].6.1-10｜装配式住宅建筑设计标准｜JGJ/T 398-2017｜√｜行标｜[01].6.1-11｜装配式劲性柱混合梁框架结构｜技术规程",
+        "doc_date": "2023-11"
+      },
+      "fetched_at": "2026-11-10T20:26:22+08:00",
+      "elapsed_ms": 2760.5
+    },
+    {
+      "channel": "住建部公告第1711号（第三方镜像 far2000）",
+      "level": "S0",
+      "carrier": "https://www.far2000.cn/m/zixun/20171122/702.html",
+      "bytes": 10992,
+      "bytes_note": "curl --compressed 解码后 10,992 B；HTTP 压缩体 4,273 B",
+      "sha256": "b93dfe06964d0d29aa5fcc399571f0cd4c85b621d28c84a963eaf413d6433742",
+      "quote": "现批准《装配式住宅建筑设计标准》为行业标准，编号为JGJ/T398-2017，自2018年6月1日起实施。",
+      "parsed": {
+        "code": "JGJ/T 398-2017",
+        "name": "装配式住宅建筑设计标准",
+        "announcement_no": "1711",
+        "issued_date": "2017-10-30",
+        "implemented_date": "2018-06-01"
+      },
+      "fetched_at": "2026-11-10T20:08:46+08:00",
+      "elapsed_ms": 2244
+    },
+    {
+      "channel": "中国建筑工业出版社官方电子书库（国标电子书库，bookID 102668）",
+      "level": "S1",
+      "carrier": "https://ebook.chinabuilding.com.cn/zbooklib/bookpdf/probation?SiteID=1&bookID=102668",
+      "bytes": 13393,
+      "sha256": "e6e5e5e76f0fc0f60f9209637c4d23a01daae5c86ceba808bcb1db2442d1deeb",
+      "pages": "p1 封面／p2 扉页／p3 版权页",
+      "page_sha256": {
+        "p1": "4bc8e595ef9345f04938cd8ba36a57dd38dde303808fe76767eb11771679a83d",
+        "p2": "a864707d3c8b6450422987f86fba3b372e3d1f006bcb90843d754560af62738d",
+        "p3": "e2202c3e5db28235c73286bcc051f43a01de84b9a30f5b3dbb8bcb3cc36b0edb"
+      },
+      "parsed": {
+        "code": "JGJ/T 398-2017",
+        "name": "装配式住宅建筑设计标准",
+        "issued_date": "2017-10-30",
+        "implemented_date": "2018-06-01",
+        "publisher": "中国建筑工业出版社",
+        "record_no": "J2407-2017",
+        "unified_book_no": "15112.  31319"
+      },
+      "fetched_at": "2026-11-10T21:05:00+08:00",
+      "elapsed_ms": 332.0,
+      "note": "官方出版者电子书试读页；封面/扉页/版权页文本层有 OCR 噪声，上列六轴逐字可读；第 2.0.1 条见 clause_anchor（p10 片段另计 226 ms）"
+    },
+    {
+      "channel": "中国建筑工业出版社官方电子书库 p4 前置公告页（bookID 102668）",
+      "level": "S1",
+      "carrier": "https://ebook.chinabuilding.com.cn/upload/resources/pdf/20180313/150244300/JGJT398-20174.page",
+      "bytes": 3464,
+      "sha256": "571242baf17b542ae7d3b04dfb3a470ad7f23903d0c4bfb5f4737d6fb6e22917",
+      "pages": "PDF 页 4（页脚 3，前置页编码）",
+      "parsed": {
+        "code": "JGJ/T 398-2017",
+        "announcement_no": "第1711号",
+        "title": "住房城乡建设部关于发布行业标准《装配式住宅建筑设计标准》的公告",
+        "issuer": "中华人民共和国住房和城乡建设部",
+        "issued_date": "2017-10-30",
+        "implemented_date": "2018-06-01"
+      },
+      "fetched_at": "2026-11-10T21:40:00+08:00",
+      "elapsed_ms": 262.0,
+      "note": "pdf2htmlEX 文本层；版面空格与字形噪声（如 JGJ/ T、井由）保留，公告号与日期逐字；与 p1 封面、p3 版权页互证"
+    },
+    {
+      "channel": "中国标准化研究院国家标准馆（CNIS）状态详情页",
+      "level": "S2",
+      "carrier": "https://ndls.cnis.ac.cn/standard/detail/c3286492625181cfe49b71c9fdd72581",
+      "bytes": 138198,
+      "sha256": "d1d18b7c9163d2f95ef909fbcec44ecde9352bcdb9893f77279b6762cce0cca5",
+      "pages": "详情页单个 HTML",
+      "parsed": {
+        "code": "JGJ/T 398-2017",
+        "name": "装配式住宅建筑设计标准(附条文说明)",
+        "status": "现行",
+        "issued_date": "2017-10-30",
+        "implemented_date": "2018-06-01",
+        "publisher_category": "中国-行业标准-建筑工业"
+      },
+      "fetched_at": "2026-11-10T21:41:00+08:00",
+      "elapsed_ms": 426.5,
+      "note": "状态取页面 data-a000=\"现行\" 结构化字段；国家标准化信息服务机构，非住建部发布机关公告面，不据此断言永不废止"
+    }
+  ],
+  "clause_anchor": {
+    "page": "PDF 页 10／data-page-no=a；印刷页 2",
+    "quote": "以工业化生产方式的系统性建造体系为基础，建筑结构体与建筑内装体中全部或部分部件部品采用装配方式集成化建造的住宅建筑。",
+    "carrier_sha256": "978500925ed51cba4eb8acbd3ecf3bf1942d826da89b628b8ca69751807f1753",
+    "carrier": "国标电子书库 JGJ/T 398-2017 第 10 页片段（JGJT398-201710.page，7,278 B）",
+    "carrier_url": "https://ebook.chinabuilding.com.cn/upload/resources/pdf/20180313/150244300/JGJT398-201710.page",
+    "grade": "S1",
+    "limitation": "官方出版者电子书试读页 pdf2htmlEX 文本层；同页其它条文有 OCR 噪声；未取得纸质正式出版物，未通读全书。",
+    "knowledge_entry": "核验成果/知识条目_706a05f78c3a0077f053f064df0a2630f53559279e57e861403f52ec6e28a6d5.json",
+    "supersedes": "046c51d58f70d9c5bee916ba26079ad7659f659be5ec99edd11f944bc5891633"
+  },
+  "citable_level": "S1（条文原页＋身份封面＋公告页；状态 S2 现读）",
+  "not_covered": [
+    "住建部门户网站公告页直链（站内索引未命中；公告正文已由官方电子书 p4 取得）",
+    "纸质正式出版物（未取得，不构成引用障碍）"
+  ],
+  "low_grade_fields": [],
+  "repo_citation": {
+    "ledger": "核验成果/2026-11-10_长沙评审_标准引用台账.json",
+    "key": "JGJ/T 398",
+    "count": 6,
+    "anchor": "〈过程目录〉/2026-11-10/评审取文/2_长沙市装配式装修墙体部品图集.txt:320",
+    "text": "《装配式住宅建设设计标准》JGJ/T398-2017",
+    "name_drift": "建设设计 → 建筑设计"
+  },
+  "outcome": "hit",
+  "cache": {
+    "created_at": "2026-11-10T20:02:01+08:00",
+    "updated_at": "2026-11-10T21:41:00+08:00",
+    "verified_on": "2026-11-10",
+    "ttl_days": 90,
+    "expires_at": "2027-02-08"
+  },
+  "last_run": {
+    "mode": "refresh",
+    "started_at": "2026-11-10T20:25:52+08:00",
+    "elapsed_ms": 45589.3,
+    "budget_s": 30.0,
+    "corroborate": true
+  },
+  "channel_states": [
+    {
+      "channel": "gov:sd-2025",
+      "state": "hit",
+      "reason": "row_found",
+      "elapsed_ms": 26863.0,
+      "detail": null
+    },
+    {
+      "channel": "gov:xj-2023",
+      "state": "hit",
+      "reason": "row_found",
+      "elapsed_ms": 2760.5,
+      "detail": null
+    },
+    {
+      "channel": "mohurd",
+      "state": "indeterminate",
+      "reason": "record_missing",
+      "elapsed_ms": 1859.7,
+      "detail": null
+    },
+    {
+      "channel": "hbba",
+      "state": "not_covered",
+      "reason": "family_control_empty",
+      "elapsed_ms": 617.1,
+      "detail": null
+    },
+    {
+      "channel": "samr",
+      "state": "not_covered",
+      "reason": "family_control_empty",
+      "elapsed_ms": 582.9,
+      "detail": null
+    },
+    {
+      "channel": "openstd",
+      "state": "not_covered",
+      "reason": "family_control_empty",
+      "elapsed_ms": 1889.5,
+      "detail": null
+    }
+  ],
+  "review_status": "独立复核通过（2026-11-10；reviewer=独立复核代理（子代理，只读，官方电子书支四））；知识条目 706a05f7…a6d5 已入库并取代 046c51d5…1633。公告页（p4）与 CNIS 现行状态为 2026-11-10 执行代理现读补证，未经独立复核",
+  "generated_by": "on_demand_retrieval.py",
+  "generated_at": "2026-11-10T20:26:37+08:00"
+}

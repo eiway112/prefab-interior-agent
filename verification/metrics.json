@@ -2,9 +2,9 @@
   "schema": "verification-metrics/1",
   "note": "由派生器在派生时现读包内文件计算，不手工维护；不含标准原文与检测报告",
   "distribution": {
-    "files_total": 99,
+    "files_total": 106,
     "skills": 15,
-    "skill_files": 66,
+    "skill_files": 73,
     "examples": 4
   },
   "tests": {
@@ -16,7 +16,7 @@
     "ic07_compliance": {
       "path": "skills/prefab-standards-reviewer/sr_ic07_compliance_test.py",
       "test_methods": 20,
-      "sha256_12": "913de3d35737"
+      "sha256_12": "76d118cbcaf6"
     },
     "total": 109,
     "counting": "静态计数测试文件中声明的 test_ 方法；是否通过以 CI 或本地实跑为准"
