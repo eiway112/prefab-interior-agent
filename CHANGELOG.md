@@ -2,6 +2,18 @@
 
 本仓为技能分发面，只记录对外发布基线的变更；开发过程记录不进本仓。
 
+## v1.8.0 — 2026-11-11
+
+**按需取真消费侧产品化**（件数 **99 → 106**，+scripts/ 6 + evidence/ 1）：
+
+- **工具随技能包交付**：`prefab-standards-reviewer` 新增 `scripts/`（6 件：`on_demand_retrieval`／`citation_ledger`／`answer_to_case`／`deliverable_render`／`delivery_layout`／`retrieval_channels.json`）与 `evidence/card_JGJ-T-398-2017.json`。打包态（运行时 `~/.qoder/skills/` 与公开仓 `skills/prefab-standards-reviewer/`）与开发仓态共用同一份字节，`delivery_layout.py` 按结构正向识别（`scripts/` 上邻 `SKILL.md`）切换路径常量，消费侧不写盘、不联网即可拿到证据卡。
+- **引擎强化**：`on_demand_retrieval.py` 加墙钟硬闸（`Budget` 类 socket_s＋wall_s＋retries，分通道从 `retrieval_channels.json` 的 `budgets` 段取预算）；`http_get` 改分块读（`read1`）＋逐块 deadline 检查；`_transient()` 只重试连接类异常（4xx 确定不重试）；`build_card` 把条文等级纳入 citable_level（防 S1→S2 降级）、`_carry_review` 保留独立复核标记（机器刷新附日期戳，不静默覆写）；`probe_gov_compilation` 加大载体门控（`--allow-large` 放行）；selftest 31→46（含墙钟负向注入／4xx 不重试／瞬时重试后命中／大载体门控／状态映射）。
+- **交付前的标准引用核验改写技能相对路径**（总入口 2.5.20→2.5.21／复核技能 2.2.9→2.2.10）：证据卡补证／联网取真／工具不在场三条路径；`answer_to_case --exit-gate` 对索引外且未声明的台账行打印证据卡信息与缺口计数（索引内／有效／过期／无卡／已声明外源），**判定不变**；`--fetch-missing` 默认关、30 s/枚总 120 s。
+- **公开面守卫**：`derive_public_face.py` 补按轮自清过程目录的 neutral-name 映射（PATH_RULES 新增一档）；新增 `public_face_reference_test.py`（8 负向注入用例，PATH_RULES 变换后逐字节比对），披露非随包悬空 332（证据报告不入公开面属既有结构）＋随包内悬空 6（工具 docstring 模板路径），不硬判红。
+- **通道注册表**：`retrieval_channels.json` 新增 `budgets` 段（default socket 8 s / wall 12 s、gov_compilation socket 20 s / wall 35 s、large_carrier 8 MiB、retry_attempts 1）。
+- 零改＝标准限值、dB／耐火数值、公式常数、红线名与枚数、契约字段与枚举、CI 矩阵；其余 14 件技能 SKILL.md 版本号不变；`verification/metrics.json` 与 `verification/standards-verification.md` 由派生器现读重算；`README.md` 版本徽章与「当前版本」回扫至 `v1.8.0`。
+- 据实保留：Gitee Pull 镜像刷新在发起人侧。
+
 ## v1.7.3 — 2026-11-10
 
 把 11-10 开发仓的**标准引用核验链路与按需取真首刀**带出到分发面（**99 件，件数不变**）：

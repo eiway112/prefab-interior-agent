@@ -3,7 +3,7 @@
   <h1>装配式装修智能体技能合集</h1>
   <p>把一个垂直领域的专家判据，做成智能体可加载、可审计、可复用的知识资产</p>
   <p>
-    <img src="https://img.shields.io/badge/version-v1.7.3-orange" alt="version">
+    <img src="https://img.shields.io/badge/version-v1.8.0-orange" alt="version">
     <img src="https://img.shields.io/badge/skills-15-blue" alt="skills">
     <img src="https://img.shields.io/badge/python-3.10%2B-yellow" alt="python">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
@@ -376,7 +376,7 @@ prefab-interior-agent/
 
 ## 版本与迭代策略
 
-- 本仓按语义化版本打标签发布（当前 `v1.7.3`）；引用请**锁定到 tag 或具体 commit**（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。
+- 本仓按语义化版本打标签发布（当前 `v1.8.0`）；引用请**锁定到 tag 或具体 commit**（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。
 - 公开面变更见 [CHANGELOG.md](CHANGELOG.md)；各技能的具体版本以 `SKILL.md` frontmatter 的 `version` 字段为准。
 - 规范标准修订、技能内容勘误以 PATCH/MINOR 发布；架构或契约级调整以 MAJOR 发布。
 - **反馈与纠错**：欢迎开 Issue（使用问题、数据纠错、标准失效线索均可）。数据纠错类 Issue 承诺 **3 个工作日内**响应——这类 Issue 是本仓最有价值的外部输入，因为标准会修订、本仓会漏。安全类问题请走 [SECURITY.md](SECURITY.md) 的私密通道；协作方式见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。
