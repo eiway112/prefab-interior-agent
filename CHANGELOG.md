@@ -10,6 +10,7 @@
 - **引擎强化**：`on_demand_retrieval.py` 加墙钟硬闸（`Budget` 类 socket_s＋wall_s＋retries，分通道从 `retrieval_channels.json` 的 `budgets` 段取预算）；`http_get` 改分块读（`read1`）＋逐块 deadline 检查；`_transient()` 只重试连接类异常（4xx 确定不重试）；`build_card` 把条文等级纳入 citable_level（防 S1→S2 降级）、`_carry_review` 保留独立复核标记（机器刷新附日期戳，不静默覆写）；`probe_gov_compilation` 加大载体门控（`--allow-large` 放行）；selftest 31→46（含墙钟负向注入／4xx 不重试／瞬时重试后命中／大载体门控／状态映射）。
 - **交付前的标准引用核验改写技能相对路径**（总入口 2.5.20→2.5.21／复核技能 2.2.9→2.2.10）：证据卡补证／联网取真／工具不在场三条路径；`answer_to_case --exit-gate` 对索引外且未声明的台账行打印证据卡信息与缺口计数（索引内／有效／过期／无卡／已声明外源），**判定不变**；`--fetch-missing` 默认关、30 s/枚总 120 s。
 - **公开面守卫**：`derive_public_face.py` 补按轮自清过程目录的 neutral-name 映射（PATH_RULES 新增一档）；新增 `public_face_reference_test.py`（8 负向注入用例，PATH_RULES 变换后逐字节比对），披露非随包悬空 332（证据报告不入公开面属既有结构）＋随包内悬空 6（工具 docstring 模板路径），不硬判红。
+- **公开 README 引擎描述**：L39 对比句扩成「答案之前」层（按需取真引擎 L-RKL 全描述：答复前跑官方源、逐条锚定条款号／页码／原文、S1—S4 分级置信度、缺口透明）；同段新增 Mermaid 决策流程图（提问 → 缓存 → 6 路权威源并行 → 证据卡 → 分级 → 答复／缺口，墙钟硬闸 default 12 s / gov 35 s）。
 - **通道注册表**：`retrieval_channels.json` 新增 `budgets` 段（default socket 8 s / wall 12 s、gov_compilation socket 20 s / wall 35 s、large_carrier 8 MiB、retry_attempts 1）。
 - 零改＝标准限值、dB／耐火数值、公式常数、红线名与枚数、契约字段与枚举、CI 矩阵；其余 14 件技能 SKILL.md 版本号不变；`verification/metrics.json` 与 `verification/standards-verification.md` 由派生器现读重算；`README.md` 版本徽章与「当前版本」回扫至 `v1.8.0`。
 - 据实保留：Gitee Pull 镜像刷新在发起人侧。
