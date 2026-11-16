@@ -10,21 +10,21 @@
   "tests": {
     "sre_regression": {
       "path": "skills/prefab-standards-reviewer/sre_regression_test.py",
-      "test_methods": 89,
-      "sha256_12": "41b3c49863bf"
+      "test_methods": 91,
+      "sha256_12": "33c566ed68a3"
     },
     "ic07_compliance": {
       "path": "skills/prefab-standards-reviewer/sr_ic07_compliance_test.py",
       "test_methods": 20,
       "sha256_12": "76d118cbcaf6"
     },
-    "total": 109,
+    "total": 111,
     "counting": "静态计数测试文件中声明的 test_ 方法；是否通过以 CI 或本地实跑为准"
   },
   "standards": {
     "source": {
       "path": "skills/standards-index.md",
-      "sha256_12": "16c16fc5fa30"
+      "sha256_12": "167fdf8add77"
     },
     "main_rows": 94,
     "by_level": {
@@ -81,7 +81,7 @@
     "combos": 4
   },
   "releases": {
-    "count": 33,
-    "latest": "v1.8.0"
+    "count": 34,
+    "latest": "v1.9.0"
   }
 }

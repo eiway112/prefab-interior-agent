@@ -37,6 +37,17 @@ GRADE_LABEL = {
 }
 READ_STATUS = ("已读", "部分读取", "未读", "识别失败")
 D_FORBIDDEN = ("规范要求", "规范规定", "标准要求", "应符合")
+LEDGER_SCHEMA = "citation-ledger/v1"
+STANDARDS_MODES = ("review", "qa")
+CARD_STATES = ("valid", "stale", "missing", "declared")
+GATE_VERDICTS = ("PASS", "FAIL")
+CARD_COUNT_KEYS = ("indexed", "cached", "stale", "missing", "declared",
+                   "indexed_cached", "indexed_stale", "indexed_missing")
+# 发起人 2026-11-12 裁定：对外文件评审＝日常业务辅助性支持，仅作业务参考、不作为正式文件。
+REVIEW_QUALIFICATION = ("本件属日常业务辅助性支持，仅作业务参考，为非正式文件；"
+                        "不得用作主管部门审批、发布或验收依据。")
+# 自称正式评审的字面（否定句里不出现这些形，故可与上面的定性声明并存）
+FORMAL_CLAIMS = ("供编制组与主管部门使用", "供主管部门使用", "正式发布前专家评审", "发布前专家评审")
 # 判定口径属本件按场景该定的事，问回去等于把决策成本转给用户（PW 技能作答协议 L0：不得抛回选档）
 # 「口径/评价量」作为被问对象即判转嫁；修正量/Rw 等只在与选择问句结合时才判（索取载 C 值的报告是数据请求，不拦）
 JUDGMENT_TERMS = ("口径", "评价量")
@@ -50,7 +61,7 @@ EXT_CODE_RE = re.compile(
 def _ext(text) -> str:
     t = _s(text)
     t = t.replace("PL-229 定量暂停期", "隔声定量暂停期").replace("PL-229 暂停期", "隔声定量暂停期")
-    t = re.sub(r"(?:PL|IC|CG)-\d+\s*", "", t)
+    t = re.sub(r"(?<![A-Za-z0-9])(?:PL|IC|CG)-\d+(?:-\d+)*\s*", "", t)
     t = EXT_CODE_RE.sub("", t)
     return re.sub(r"[ \t]{2,}", " ", t)
 
@@ -62,6 +73,7 @@ body{margin:0;background:#eef1f4;color:var(--ink);font:14px/1.75 "Microsoft YaHe
 .kicker{font-size:12px;letter-spacing:2px;color:var(--muted)}
 h1{font-size:22px;line-height:1.45;margin:6px 0 16px;font-weight:600}
 h2{font-size:15px;margin:26px 0 10px;padding-left:9px;border-left:4px solid var(--accent);font-weight:600}
+h3{font-size:13.5px;margin:18px 0 6px;font-weight:600}
 table{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0}
 th,td{border:1px solid var(--line);padding:8px 10px;vertical-align:top;text-align:left}
 th{background:var(--soft);font-weight:600;white-space:nowrap}
@@ -274,6 +286,213 @@ def load_case(path: Path) -> dict:
 
 def _s(value) -> str:
     return value if isinstance(value, str) else ""
+
+
+def _is_int(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def validate_standards(st) -> list[str]:
+    """引用台账随件块（`standards`）的契约：每个计数都必须能由件内数据复算，不接受手写字面。
+
+    动因＝2026-11-10 一次真实文件评审的附录把编号数与引用点数写死在生成脚本里，与被评审文件
+    机算值计数偶合而成员不同（漏登一枚团标）。故本块判据取**成员级**与**复算级**两层：
+    键集逐枚对撞、计数由 results／rows／states 现算，任一处手写即红。
+
+    射程边界（据实声明，独立复核第一轮 B1 后收窄、第二轮 N12/N13 再收窄）：本函数覆盖**聚合计数**
+    （red/yellow/green/unverified/unindexed_undeclared/ledger.count/cards 八档）与**成员集**
+    （rows 键集、states 键集与 indexed 逐行对随件 index_keys、lines 键集由 states 派生）。
+    **行级 `rows[].count`、`hits[].line`、`cited_years` 与判词字面不在本函数射程**：
+    评审档由 `answer_to_case._ledger_closure_errors` 与被评审文件实抽逐枚对撞承担
+    （该函数另对撞 `inputs[].bytes`／`sha256` 与 ack 标记），答疑档由台账抽取器在构建时承担；
+    不得声称「每个字段手写即红」。
+    **`index_keys` 是自声明面而非锚定面**：本函数为纯函数、不读索引文件，故只校它与 `states[].indexed`
+    互校自洽（并校去重升序形制）；把 index_keys 整块替换、逐行 indexed 与聚合同步改写的**协同篡改**
+    不在本函数射程。真实索引锚定由产出端承担（`audit_standards` 从 `INDEX_PATH` 现算），
+    交付后重锚须另设入口，本批不新增常驻机制。
+    """
+    errs: list[str] = []
+    if not isinstance(st, dict):
+        return ["standards 必须是对象"]
+
+    led = st.get("ledger")
+    rows: list = []
+    if not isinstance(led, dict):
+        errs.append("standards.ledger 缺失或不是对象（台账须随件，不得只留指针）")
+    else:
+        if led.get("schema") != LEDGER_SCHEMA:
+            errs.append(f"standards.ledger.schema 必须为 {LEDGER_SCHEMA}")
+        raw_rows = led.get("rows")
+        if not isinstance(raw_rows, list) or not raw_rows:
+            errs.append("standards.ledger.rows 为空：零引用是合法态，但不得冒充已核验")
+        else:
+            rows = raw_rows
+        if not _is_int(led.get("count")) or led.get("count") != len(rows):
+            errs.append(f"standards.ledger.count {led.get('count')!r} ≠ rows 实数 {len(rows)}")
+
+    keys: list[str] = []
+    years: dict[str, list] = {}
+    for i, r in enumerate(rows):
+        if not isinstance(r, dict) or not _s(r.get("key")).strip():
+            errs.append(f"standards.ledger.rows[{i}].key 不得为空")
+            continue
+        keys.append(r["key"])
+        years[r["key"]] = r.get("cited_years") or []
+    dup = sorted({k for k in keys if keys.count(k) > 1})
+    if dup:
+        errs.append(f"standards.ledger.rows 键重复：{'、'.join(dup)}")
+
+    ver = st.get("verification")
+    if not isinstance(ver, dict):
+        errs.append("standards.verification 缺失或不是对象（出口闸回执须随件，不只在 stdout）")
+        ver = {}
+    mode = ver.get("mode")
+    if mode not in STANDARDS_MODES:
+        errs.append(f"standards.verification.mode 必须是 {STANDARDS_MODES}")
+    ikeys = ver.get("index_keys")
+    if not isinstance(ikeys, list) or not ikeys or not all(_s(x).strip() for x in ikeys):
+        errs.append("standards.verification.index_keys 必须是非空字符串数组（索引成员集随件，供逐行对撞）")
+        ikeys = []
+    elif ikeys != sorted(set(ikeys)):
+        errs.append("standards.verification.index_keys 须为去重后升序（形制由 audit_standards 单源产出）")
+    iset = set(ikeys)
+    results = ver.get("results")
+    if not isinstance(results, list) or not results:
+        errs.append("standards.verification.results 为空：无判定明细不得报计数")
+        results = []
+    tally = {"FAIL": 0, "WARN": 0, "OK": 0}
+    for i, it in enumerate(results):
+        if (not isinstance(it, (list, tuple)) or len(it) != 2
+                or it[0] not in tally or not _s(it[1]).strip()):
+            errs.append(f"standards.verification.results[{i}] 须为 [级别, 判词]，级别 ∈ FAIL/WARN/OK")
+            continue
+        tally[it[0]] += 1
+    for name, lv in (("red", "FAIL"), ("yellow", "WARN"), ("green", "OK")):
+        got = ver.get(name)
+        if not _is_int(got):
+            errs.append(f"standards.verification.{name} 必须是整数")
+        elif got != tally[lv]:
+            errs.append(f"standards.verification.{name} {got} ≠ results 复算 {tally[lv]}（计数不得手写）")
+
+    cards = st.get("cards")
+    if not isinstance(cards, dict):
+        errs.append("standards.cards 缺失或不是对象（卡消费读数须随件）")
+        cards = {}
+    for k in CARD_COUNT_KEYS:
+        if not _is_int(cards.get(k)) or cards.get(k) < 0:
+            errs.append(f"standards.cards.{k} 必须是非负整数")
+    states = cards.get("states")
+    if not isinstance(states, list):
+        errs.append("standards.cards.states 必须是数组（逐行卡状态，索引内行也须报）")
+        states = []
+    indexed_of: dict[str, bool] = {}
+    state_of: dict[str, str] = {}
+    for i, s in enumerate(states):
+        if not isinstance(s, dict) or not _s(s.get("key")).strip():
+            errs.append(f"standards.cards.states[{i}].key 不得为空")
+            continue
+        if not isinstance(s.get("indexed"), bool):
+            errs.append(f"standards.cards.states[{i}].indexed 必须是布尔值")
+        if s.get("state") not in CARD_STATES:
+            errs.append(f"standards.cards.states[{i}].state 必须是 {CARD_STATES}")
+            continue
+        if s["state"] == "declared" and s.get("indexed"):
+            errs.append(f"standards.cards.states[{i}] 索引内行不得记为已声明外源：{s['key']}")
+        if iset and bool(s.get("indexed")) != (s["key"] in iset):
+            errs.append(f"standards.cards.states[{i}].indexed 与随件索引成员集不符：{s['key']}")
+        indexed_of[s["key"]] = bool(s.get("indexed"))
+        state_of[s["key"]] = s["state"]
+    if sorted(indexed_of) != sorted(set(keys)):
+        miss = sorted(set(keys) - set(indexed_of))
+        extra = sorted(set(indexed_of) - set(keys))
+        errs.append(f"standards.cards.states 与台账键集不符（成员级）：缺 {miss}｜多 {extra}")
+    if len(states) != len(keys):
+        errs.append(f"standards.cards.states {len(states)} 条 ≠ 台账 {len(keys)} 行")
+    lines = cards.get("lines")
+    if not isinstance(lines, list):
+        errs.append("standards.cards.lines 必须是数组（逐行卡提示，由 states 派生）")
+        lines = []
+    want_lines = {k for k in keys if k in state_of
+                  and (state_of[k] in ("valid", "stale")
+                       or (state_of[k] == "missing" and not indexed_of.get(k)))}
+    got_lines = [x[0] for x in lines if isinstance(x, (list, tuple)) and len(x) == 2 and _s(x[0]).strip()]
+    if len(got_lines) != len(lines):
+        errs.append("standards.cards.lines 每项须为 [键, 提示] 二元组")
+    if sorted(got_lines) != sorted(want_lines):
+        errs.append(f"standards.cards.lines 键集与 states 派生不符：缺 {sorted(want_lines - set(got_lines))}"
+                    f"｜多 {sorted(set(got_lines) - want_lines)}")
+
+    def _n(pred) -> int:
+        return sum(1 for k in keys if k in state_of and pred(k))
+
+    pop = [
+        ("indexed", lambda k: indexed_of.get(k, False)),
+        ("declared", lambda k: not indexed_of.get(k, False) and state_of[k] == "declared"),
+        ("cached", lambda k: not indexed_of.get(k, False) and state_of[k] == "valid"),
+        ("stale", lambda k: not indexed_of.get(k, False) and state_of[k] == "stale"),
+        ("missing", lambda k: not indexed_of.get(k, False) and state_of[k] == "missing"),
+        ("indexed_cached", lambda k: indexed_of.get(k, False) and state_of[k] == "valid"),
+        ("indexed_stale", lambda k: indexed_of.get(k, False) and state_of[k] == "stale"),
+        ("indexed_missing", lambda k: indexed_of.get(k, False) and state_of[k] == "missing"),
+    ]
+    for name, pred in pop:
+        if _is_int(cards.get(name)) and cards[name] != _n(pred):
+            errs.append(f"standards.cards.{name} {cards[name]} ≠ states 复算 {_n(pred)}")
+    if all(_is_int(cards.get(k)) for k in ("indexed", "cached", "stale", "missing", "declared")):
+        total = sum(cards[k] for k in ("indexed", "cached", "stale", "missing", "declared"))
+        if total != len(keys):
+            errs.append(f"standards.cards 五档合计 {total} ≠ 台账 {len(keys)} 行（有行未被查卡）")
+
+    for name, pred in (
+        ("unindexed_undeclared", lambda k: not indexed_of.get(k, False) and state_of[k] != "declared"),
+        ("unverified", lambda k: not years.get(k) or not indexed_of.get(k, False)),
+    ):
+        got = ver.get(name)
+        if not _is_int(got) or got < 0:
+            errs.append(f"standards.verification.{name} 必须是非负整数")
+        elif got != _n(pred):
+            errs.append(f"standards.verification.{name} {got} ≠ 台账＋卡状态复算 {_n(pred)}")
+
+    gate = st.get("gate")
+    if not isinstance(gate, dict):
+        errs.append("standards.gate 缺失或不是对象（须记判定与出具时点）")
+    else:
+        if gate.get("verdict") not in GATE_VERDICTS:
+            errs.append(f"standards.gate.verdict 必须是 {GATE_VERDICTS}")
+        elif gate["verdict"] == "PASS" and tally["FAIL"]:
+            errs.append(f"standards.gate 报 PASS 而红 {tally['FAIL']} 项：红件不得自称放行")
+        for k in ("tool", "ran_at"):
+            if not _s(gate.get(k)).strip():
+                errs.append(f"standards.gate.{k} 不得为空")
+
+    # 契约判定字段（评审档 review_contract／答疑档 standards_contract）可选，但在场即校形制（第三轮 N30④）
+    for cname in ("review_contract", "standards_contract"):
+        c = st.get(cname)
+        if c is None:
+            continue
+        if not isinstance(c, dict):
+            errs.append(f"standards.{cname} 必须是对象")
+            continue
+        if c.get("verdict") not in GATE_VERDICTS:
+            errs.append(f"standards.{cname}.verdict 必须是 {GATE_VERDICTS}")
+        ce = c.get("errors")
+        if not isinstance(ce, list) or not all(_s(x).strip() for x in ce):
+            errs.append(f"standards.{cname}.errors 必须是字符串数组")
+        elif (c.get("verdict") == "PASS") != (not ce):
+            errs.append(f"standards.{cname} 的 verdict 与 errors 不自洽")
+
+    qual = _s(st.get("qualification")).strip()
+    if not qual:
+        errs.append("standards.qualification 不得为空（定性声明须随件）")
+    else:
+        if mode == "review":
+            for w in ("业务参考", "非正式文件"):
+                if w not in qual:
+                    errs.append(f"standards.qualification 缺「{w}」：对外文件评审已裁为业务参考、非正式文件")
+        for w in FORMAL_CLAIMS:
+            if w in qual:
+                errs.append(f"standards.qualification 自称正式评审（{w}），与发起人 2026-11-12 裁定不符")
+    return errs
 
 
 def validate(case) -> list[str]:
@@ -534,6 +753,9 @@ def validate(case) -> list[str]:
             if not _s(doubt.get(key)).strip():
                 errs.append(f"{at}.doubt.{key} 不得为空（存疑须写清范围与定案条件）")
 
+    if case.get("standards") is not None:
+        errs.extend(validate_standards(case["standards"]))
+
     return errs
 
 
@@ -600,6 +822,134 @@ def _withdrawn_table(case: dict) -> str:
         "<h2>已剔除的答复条目（不构成本件结论）</h2>"
         "<table><thead><tr><th>原编号</th><th>结论项</th><th>原答复表述</th><th>剔除理由</th></tr></thead><tbody>"
         + rows + "</tbody></table>"
+    )
+
+
+def _card_label(state: str) -> str:
+    return {"valid": "有效", "stale": "已过期", "missing": "无卡", "declared": "已声明外源"}.get(state, "无卡")
+
+
+def standards_table(st: dict) -> str:
+    """台账逐行表（编号／年号／引用点／索引／卡）。工作面与评审件共用，杜绝第二份手写台账。"""
+    e = html.escape
+    states = {s["key"]: s for s in st["cards"]["states"]}
+    rows = "".join(
+        "<tr>"
+        f'<td>{e(r["key"])}</td>'
+        f'<td>{e("、".join(str(y) for y in (r.get("cited_years") or [])) or "未注")}</td>'
+        f'<td>{e(str(r.get("count") or 0))}</td>'
+        f'<td>{"索引内" if states.get(r["key"], {}).get("indexed") else "索引外"}</td>'
+        f'<td>{e(_card_label(states.get(r["key"], {}).get("state", "missing")))}</td>'
+        "</tr>"
+        for r in st["ledger"]["rows"]
+    )
+    return ("<table><thead><tr><th>标准编号</th><th>引用年号</th><th>引用点</th><th>索引</th><th>证据卡</th>"
+            "</tr></thead><tbody>" + rows + "</tbody></table>")
+
+
+def standards_receipt(st: dict) -> str:
+    """出口闸回执字面（计数＋卡消费＋判定）。三形态与评审件共用同一份，不另写常量。"""
+    ver, cards, led = st["verification"], st["cards"], st["ledger"]
+    rows = led["rows"]
+    pts = sum(r.get("count") or 0 for r in rows)
+    return (f"红 {ver['red']}｜黄 {ver['yellow']}｜绿 {ver['green']}｜"
+            f"未核 {ver['unverified']} 枚｜索引外未声明 {ver['unindexed_undeclared']} 枚｜"
+            f"台账 {len(rows)} 枚／{pts} 引用点｜"
+            f"证据卡：索引内 有效 {cards['indexed_cached']}／过期 {cards['indexed_stale']}／无卡 {cards['indexed_missing']}，"
+            f"索引外未声明 有效 {cards['cached']}／过期 {cards['stale']}／无卡 {cards['missing']}，"
+            f"已声明外源 {cards['declared']}｜出口闸 {st['gate']['verdict']}")
+
+
+# 对外面判词清洗：verify 判词内嵌索引 status 全文，而 status 是内部治理散文
+# （带仓内路径／收录批号／平台查询串／内部节号／档位码 S1-S3／路由码 WS 域）。
+# 第二轮复核 B6 实测：逐类剥字面会留下编号残尾与病句（20/87 键），故改**结构性收口**——
+# 凡含状态前缀的配平括号段整段收为「（前缀）」，对外只出分类不出内部凭据散文；
+# 其后再剥反引号 span／仓内路径／URL／查询串并收口空括号与叠标点。内部代号由 _ext 承担。
+_REPO_PATH_RE = re.compile(r"(?:成果|记录|文档|程序文件|技能仓备份|_专题_[^\s/，。；）)]*)/[^\s，。；）)」』】`]+")
+_QUERY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\?[^\s，。；）)」』】`]+")
+# 第四轮 N35／第五轮 N41／第六轮 N44：内部字面类（§／档位码／本仓／WS 域）的剥离单源＝
+# `_ext_msg` 内继 `_ext(_collapse_status(...))` 之后、其余剥支之前对**全文**生效（一处覆盖裸文本／半角括号／
+# 全角括号三形；该前置位置载重——须先剥字面再清括号/标点，否则残段清不净；_ext_msg 只服务对外面，
+# 工作面仍留原文，不影响内部判定证据）。`_collapse_status` 只负责括号段结构：含前缀配平段收为「（前缀）」、
+# 配平但无前缀且**含内部字面**的段整段删除（配平故不吞尾句编号年号，第六轮 N45）、其余原样保留。
+# 编号与年号不在该针内，不吞尾。已知取舍（第五轮 N42，据实披露）：「本仓」「WS 域」无词边界，
+# 会误吃含该子串的合法中文词（基本仓储／成本仓位／WS 域外）；现批实物 0 命中，不加白名单式边界
+# （脆弱且漏内部指称形如「本仓现读」）；翻转前置＝对外面出现含该子串的合法词时改独立指称形。
+_INTERNAL_LITERAL_RE = re.compile(r"§|（S\d）|\(S\d\)|S[0-3]|WS\s*域|本仓")
+
+
+def _collapse_status(t: str) -> str:
+    from citation_ledger import STATUS_PREFIXES
+
+    out, i = [], 0
+    while i < len(t):
+        if t[i] != "（":
+            out.append(t[i])
+            i += 1
+            continue
+        depth, j = 0, i
+        while j < len(t):
+            if t[j] == "（":
+                depth += 1
+            elif t[j] == "）":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        if depth != 0:
+            # 不配平（调用方可写数据面）：不收口不删段，避免吞掉尾句编号与年号（第三轮 N30②）；
+            # 内部字面由 _ext_msg 全文层剥（第六轮 N44 单源）
+            out.append(t[i:])
+            break
+        seg = t[i:j + 1]
+        # 取段内**最早位置**的前缀，不按元组序——否则「已废止（…原记现行有效…）」会被误标（第三轮 N23）
+        hit = min((p for p in STATUS_PREFIXES if p in seg), key=seg.index, default=None)
+        if hit:
+            out.append(f"（{hit}）")
+        elif _INTERNAL_LITERAL_RE.search(seg):
+            # 配平且含内部字面：整段删除（配平故不吞尾；剥字面会留病句残段，第六轮 N45）
+            out.append("")
+        else:
+            out.append(seg)
+        i = j + 1
+    return "".join(out)
+
+
+def _ext_msg(msg: str) -> str:
+    t = _ext(_collapse_status(msg))
+    # 第六轮 N44：内部字面类全文层剥（单源），覆盖裸文本／半角括号／全角括号三形
+    t = _INTERNAL_LITERAL_RE.sub("", t)
+    t = re.sub(r"`[^`]*`", "", t)
+    t = _REPO_PATH_RE.sub("", t)
+    t = re.sub(r"https?://\S+", "", t)
+    t = _QUERY_RE.sub("", t)
+    t = re.sub(r"（[，、；\s]*）", "", t)
+    t = re.sub(r"\([，、；\s]*\)", "", t)
+    t = re.sub(r"[，、；]{2,}", "，", t)
+    t = re.sub(r"[ \t]{2,}", " ", t)
+    return t.strip().rstrip("，、；")
+
+
+def standards_issues(st: dict, levels=("FAIL", "WARN"), external: bool = False) -> str:
+    e = html.escape
+    items = "".join(f"<li>[{e(lv)}] {e(_ext_msg(msg) if external else msg)}</li>"
+                    for lv, msg in st["verification"]["results"] if lv in levels)
+    return f"<ul>{items}</ul>" if items else ("<p>无红项。</p>" if levels == ("FAIL",) else "<p>无红黄项。</p>")
+
+
+def _standards_section(case: dict) -> str:
+    st = case.get("standards")
+    if not st:
+        return ""
+    e = html.escape
+    return (
+        "<h2>标准引用核验（台账随件）</h2>"
+        f'<div class="strip"><b>出口闸回执：</b>{e(standards_receipt(st))}</div>'
+        f'<p class="note">{e(st["qualification"])}</p>'
+        + standards_table(st)
+        + '<p class="legend">未核＝身份未核（索引外）或版本未核（引用未注年号）的台账行枚数；'
+        "计数由台账与判定明细现算，不是手写值。证据卡只补证据信息，不改判定。</p>"
+        + standards_issues(st)
     )
 
 
@@ -729,6 +1079,7 @@ def render_sheet(case: dict, digest: str, name: str) -> str:
         input_rows,
         "</tbody></table>",
         "</details>",
+        _standards_section(case),
         "<h2>签署</h2>",
         _sign_table(case),
         '<div class="actions">',
@@ -824,6 +1175,13 @@ def render_letter(case: dict, digest: str, name: str) -> str:
         ("本答复的边界", [f"<p>{e('；'.join(_ext(x).rstrip('。') for x in scop['cannot_judge']))}。</p>"]),
         ("答复失效条件", [_ul([_ext(x) for x in case["overturn"]])]),
     ]
+    if case.get("standards"):
+        st = case["standards"]
+        sections.append(("标准引用核验", [
+            f'<p class="note">{e(standards_receipt(st))}</p>',
+            f'<p class="note">{e(st["qualification"])}</p>',
+            standards_issues(st, levels=("FAIL",), external=True),
+        ]))
     numerals = "一二三四五六七八九十"
     numbered = []
     for i, (title, body) in enumerate(sections):
@@ -897,10 +1255,155 @@ def render_brief(case: dict, digest: str, name: str) -> str:
         (f'<div class="no"><b>尚待核实：</b>{sum(1 for c in case["conclusions"] if c.get("review_status") == "存疑")} 条结论未定案，'
          f'按各项所列定案条件补齐后再引用。</div>'
          if any(c.get("review_status") == "存疑" for c in case["conclusions"]) else ""),
+        (f'<div class="no"><b>标准引用核验：</b>{e(standards_receipt(case["standards"]))}<br>'
+         f'{e(case["standards"]["qualification"])}</div>' if case.get("standards") else ""),
         "<footer>",
         f"<p>{e(meta['project'])} ｜ {e(meta['issued_at'])} ｜ {e(rev['version'])} ｜ 编制：{e(_s(meta['issuer'].get('prepared_by')).strip() or '______')}"
         f" ｜ 复核：{e(_s(meta['issuer'].get('reviewed_by')).strip() or '______')}</p>",
         f'<p class="gen">来源：{e(name)} ｜ sha256：{e(digest)}</p>',
+        "</footer>",
+        "</main></body></html>",
+    ]
+    return "\n".join(parts) + "\n"
+
+
+REVIEW_SCHEMA = "prefab-review/v1"
+SEVERITIES = ("A", "B", "C")
+SEVERITY_LABEL = {"A": "阻断交付", "B": "交付前应改", "C": "可交付后修订"}
+
+
+def validate_review(rep) -> list[str]:
+    """文件评审件契约：问题条目由调用方数据给，台账与回执由机算块给，两者都不得写死统计。"""
+    errs: list[str] = []
+    if not isinstance(rep, dict):
+        return ["根节点必须是对象"]
+    if rep.get("schema") != REVIEW_SCHEMA:
+        errs.append(f"schema 必须为 {REVIEW_SCHEMA}")
+    meta = rep.get("meta") if isinstance(rep.get("meta"), dict) else {}
+    if not meta:
+        errs.append("meta 缺失或不是对象")
+    for key in ("title", "subject", "issued_at", "compiled_by", "scope_note"):
+        if not _s(meta.get(key)).strip():
+            errs.append(f"meta.{key} 不得为空")
+    for key in ("title", "subject"):
+        for w in FORMAL_CLAIMS:
+            if w in _s(meta.get(key)):
+                errs.append(f"meta.{key} 自称正式评审（{w}）：对外文件评审已裁为业务参考、非正式文件")
+    inputs = meta.get("inputs")
+    if not isinstance(inputs, list) or not inputs:
+        errs.append("meta.inputs 至少一条（被评审文件须逐件列名与读取状态）")
+    else:
+        for i, it in enumerate(inputs):
+            if not isinstance(it, dict) or not _s(it.get("name")).strip():
+                errs.append(f"meta.inputs[{i}].name 不得为空")
+            elif it.get("status") not in READ_STATUS:
+                errs.append(f"meta.inputs[{i}].status 必须是 {READ_STATUS}")
+    findings = rep.get("findings")
+    if not isinstance(findings, list):
+        errs.append("findings 必须是数组（可为空：零问题也是合法评审结论）")
+        findings = []
+    seen: list[str] = []
+    for i, f in enumerate(findings):
+        at = f"findings[{i}]"
+        if not isinstance(f, dict):
+            errs.append(f"{at} 不是对象")
+            continue
+        for key in ("id", "dim", "loc", "issue", "fix"):
+            if not _s(f.get(key)).strip():
+                errs.append(f"{at}.{key} 不得为空")
+        if f.get("sev") not in SEVERITIES:
+            errs.append(f"{at}.sev 必须是 {SEVERITIES}")
+        fid = _s(f.get("id")).strip()
+        if fid in seen:
+            errs.append(f"{at}.id 重复：{fid}")
+        seen.append(fid)
+    st = rep.get("standards")
+    if st is None:
+        errs.append("standards 缺失：评审件必须随机算台账与出口闸回执，不得只给问题清单")
+    else:
+        errs.extend(validate_standards(st))
+        if isinstance(st, dict) and isinstance(st.get("verification"), dict):
+            if st["verification"].get("mode") != "review":
+                errs.append("评审件的 standards.verification.mode 必须是 review")
+    return errs
+
+
+def render_review(rep: dict, digest: str, name: str) -> str:
+    """文件评审件 → 单文件 HTML。台账附录全部由 standards 块渲染，本函数不含任何统计常量。
+
+    脱敏射程（第二轮 N14 据实声明）：只有 verify 判词经 `_ext_msg`（内嵌索引状态散文属内部治理面）；
+    `meta` 与 `findings` 是调用方数据，本函数只转写不脱敏——被评审对象自己的分级（如 S0～S3）
+    属评审内容，一律剥掉会毁掉结论。内部编号／仓内路径／URL 须由调用方在数据里自行清除。
+    """
+    e = html.escape
+    meta, st = rep["meta"], rep["standards"]
+    findings = rep["findings"]
+    sev_n = {s: sum(1 for f in findings if f["sev"] == s) for s in SEVERITIES}
+    dims: list[str] = []
+    for f in findings:
+        if f["dim"] not in dims:
+            dims.append(f["dim"])
+
+    meta_rows = "".join(
+        f"<tr><th>{e(k)}</th><td>{e(str(v))}</td></tr>"
+        for k, v in (("评审对象", meta["subject"]), ("出具日期", meta["issued_at"]),
+                     ("编制", meta["compiled_by"]), ("问题条目", f"{len(findings)} 项"))
+    )
+    input_rows = "".join(
+        f'<tr><td>{e(it["name"])}</td><td>{e(it["status"])}</td><td>{e(it.get("note") or "")}</td></tr>'
+        for it in meta["inputs"]
+    )
+    blocks = []
+    for dim in dims:
+        sub = [f for f in findings if f["dim"] == dim]
+        rows = "".join(
+            "<tr>"
+            f'<td>{e(f["id"])}</td><td>{e(f["loc"])}</td><td>{e(f["issue"])}</td>'
+            f'<td>{e(f["fix"])}</td><td>{e(f["sev"])} {e(SEVERITY_LABEL[f["sev"]])}</td>'
+            "</tr>"
+            for f in sub
+        )
+        blocks.append(
+            f"<h3>{e(dim)}（{len(sub)} 项）</h3>"
+            "<table><thead><tr><th>编号</th><th>位置</th><th>问题</th><th>建议</th><th>等级</th></tr></thead>"
+            f"<tbody>{rows}</tbody></table>"
+        )
+
+    parts = [
+        "<!DOCTYPE html>",
+        '<html lang="zh-CN"><head><meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width,initial-scale=1">',
+        f"<title>{e(meta['title'])}</title>",
+        f"<style>{CSS_SHEET}</style>",
+        "</head><body><main class=\"page\">",
+        '<div class="kicker">文件评审 · 业务参考 · 非正式文件</div>',
+        f"<h1>{e(meta['title'])}</h1>",
+        f'<div class="warn"><strong>本件定性</strong>{e(st["qualification"])}</div>',
+        f'<table class="meta">{meta_rows}</table>',
+        f'<div class="strip"><b>出口闸回执：</b>{e(standards_receipt(st))}</div>',
+        "<h2>评审范围与边界</h2>",
+        f"<p>{e(meta['scope_note'])}</p>",
+        "<h2>被评审文件与读取状态</h2>",
+        "<table><thead><tr><th>文件</th><th>读取状态</th><th>说明</th></tr></thead>"
+        f"<tbody>{input_rows}</tbody></table>",
+        "<h2>问题清单</h2>",
+        f'<p class="legend">共 {len(findings)} 项：'
+        + "；".join(f"{s} {SEVERITY_LABEL[s]} {sev_n[s]} 项" for s in SEVERITIES)
+        + "。等级与建议由评审数据给出，本件只转写。</p>",
+        *blocks,
+        "<h2>附录　标准引用核验台账</h2>",
+        f'<p class="legend">本附录由机算台账渲染：编号 {len(st["ledger"]["rows"])} 枚、引用点 '
+        f'{sum(r.get("count") or 0 for r in st["ledger"]["rows"])} 个，均由 citation_ledger 抽取后现算，'
+        "不是手写值。逐枚状态见判定明细。</p>",
+        standards_table(st),
+        '<p class="legend">未核＝身份未核（索引外）或版本未核（引用未注年号）的台账行枚数。'
+        "证据卡只补证据信息，不改判定；索引内行同样报卡状态。</p>",
+        "<h3>判定明细（红／黄逐条）</h3>",
+        standards_issues(st, external=True),
+        "<footer>",
+        f"<p>{e(st['qualification'])}</p>",
+        f'<p class="gen">来源：{e(name)} ｜ sha256：{e(digest)} ｜ 出口闸 {e(st["gate"]["verdict"])}'
+        f'（{e(st["gate"]["tool"])}，{e(st["gate"]["ran_at"])}）</p>',
         "</footer>",
         "</main></body></html>",
     ]

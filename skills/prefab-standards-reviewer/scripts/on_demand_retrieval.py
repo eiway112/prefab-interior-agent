@@ -19,7 +19,10 @@
   - 预算分两层：`--budget`＝每通道**墙钟**秒（缺省按注册表分档），`--total-budget`＝整轮墙钟秒；
     socket 单次操作超时另由分档给，二者不可混用（urllib 的 timeout 不约束整段墙钟）；
   - 证据卡 TTL：命中 90 天、未命中 7 天；过期由 query 报 stale，不得当现行证据用。
-    miss-TTL 7 天即「改日再取」回路，不是终局否证。
+    miss-TTL 7 天即「改日再取」回路，不是终局否证；
+  - 本引擎只覆盖**标准号**键：图集号（台账侧 `图集 ` 前缀键）的族与号 core 均解析不出标准前缀，
+    路由为空、不跑任何标准号端点；其出口＝供件接收与分级提炼（判据见随包
+    `shared/data-classification.md` D 类行的射程限定），不得把空路由读作「图集查不到」。
 
 依赖：Python 3.10+（标准库）；政府体系件 PDF 抽行需要 PyMuPDF，缺库时该通道记 indeterminate。
 """
@@ -547,6 +550,11 @@ def build_card(ctx: Ctx, sid: str, name: str | None, results: list[dict],
 # ---------------------------------------------------------------- 通道分类（纯函数，供 selftest）
 
 def classify_samr(sid: str, health: dict, target: dict, family: dict | None) -> dict:
+    if not family_of(sid):
+        # 图集号等非标准号键族解析为空：`family_controls` 取不到控制值 ⇒ 下面的「库不覆盖」守卫整块
+        # 被跳过，出口会落成 filtered_no_record＝「库里没有这条」。空前缀下 `startswith('')` 恒真同判。
+        # 该类键在本库的覆盖性无从判定，fail-closed 不得读成否定结论。
+        return result("samr", STATE_INDETERMINATE, "family_prefix_absent", target.get("ms", 0))
     if not health.get("ok"):
         return result("samr", STATE_INDETERMINATE, "health_fetch_failed", health.get("ms", 0), health.get("error"))
     if not any(row_code(r) for r in health.get("rows") or []):
@@ -595,6 +603,9 @@ def classify_samr(sid: str, health: dict, target: dict, family: dict | None) -> 
 
 
 def classify_openstd(sid: str, health: dict, target: dict, family: dict | None) -> dict:
+    if not family_of(sid):
+        # 同 classify_samr 的 fail-closed：族解析为空的键在该库的覆盖性无从判定，不落「库里没有这条」。
+        return result("openstd", STATE_INDETERMINATE, "family_prefix_absent", target.get("ms", 0))
     if not health.get("ok"):
         return result("openstd", STATE_INDETERMINATE, "health_fetch_failed", health.get("ms", 0), health.get("error"))
     if not health.get("showinfo"):
@@ -1016,7 +1027,12 @@ def channel_budget(ctx: Ctx, ch: str, override: float | None = None) -> Budget:
 
 
 def route_for(ctx: Ctx, sid: str) -> list[str]:
+    """族取空（图集号、手册名等无标准号前缀可解析者）不得回退全五标准号通道：`core_of` 对这类键
+    同样取空，五通道各以空查询运行、出口一律「查不到」，那是假阴性而不是「该载体无官方承载面」。
+    图集侧的出口＝供件接收与分级提炼（判据见随包 `shared/data-classification.md` D 类行）。"""
     fam = family_of(sid)
+    if not fam:
+        return []
     routes = ctx.registry.get("routes") or {}
     return routes.get(fam) or ["gov_compilation", "mohurd", "hbba", "samr", "openstd"]
 
@@ -1244,6 +1260,24 @@ def _selftest() -> int:
     of = {"ok": True, "codes": ["GB/T 491-1987"], "ms": 1}
     r = classify_openstd("JGJ/T 398-2017", oh, ot, of)
     check("openstd JGJ 库不覆盖", r["state"] == STATE_NOT_COVERED, r)
+
+    # ── 图集族路由与空前缀 fail-closed（CG-20261116-004 常驻守卫）────────────────
+    rctx = Ctx(Path("."), {"routes": {"GB": ["samr"], "JGJ": ["samr", "mohurd"]}})
+    check("route_for 图集号零通道", route_for(rctx, "图集 07CJ03-1") == [], route_for(rctx, "图集 07CJ03-1"))
+    check("route_for 图集号无前缀空格同判", route_for(rctx, "图集08J931") == [], route_for(rctx, "图集08J931"))
+    check("route_for 在册标准族仍按路由", route_for(rctx, "GB/T 50780-2012") == ["samr"],
+          route_for(rctx, "GB/T 50780-2012"))
+    check("route_for 未登记标准族仍兜底五通道", len(route_for(rctx, "CJJ 123-2019")) == 5,
+          route_for(rctx, "CJJ 123-2019"))
+    r = classify_samr("图集 07CJ03-1", health, target, None)
+    check("classify_samr 空前缀不可判≠查不到",
+          r["state"] == STATE_INDETERMINATE and r["reason"] == "family_prefix_absent", r)
+    r = classify_openstd("图集 07CJ03-1", oh, ot, None)
+    check("classify_openstd 空前缀同判",
+          r["state"] == STATE_INDETERMINATE and r["reason"] == "family_prefix_absent", r)
+    r = classify_samr("JC/T 985-2017", health, {"ok": True, "rows": [], "ms": 1},
+                      {"ok": True, "rows": [{"C_STD_CODE": "GB/T 491-1987"}], "control": "491", "ms": 1})
+    check("非图集键不受新守卫影响（库不覆盖仍成立）", r["state"] == STATE_NOT_COVERED, r)
 
     hh = {"ok": True, "records": [{"code": "JC/T 985-2017"}], "ms": 1}
     ht = {"ok": True, "records": [], "ms": 1, "url": "u", "bytes": 1, "sha256": "s"}

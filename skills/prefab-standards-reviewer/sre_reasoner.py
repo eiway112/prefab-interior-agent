@@ -1,7 +1,13 @@
 """
 SRE Reasoner —— 标准推理引擎参考实现
 =====================================
-版本：v1.11（2026-10-27，CG-20261027-007：入口语言与规则表对齐——激活表补办公隔墙两行／办公湿区一行，
+版本：v1.13（2026-11-16，CG-20261116-006：PL-301 形式层 ① 支＝条目新增可选字段 `激活领域`，
+      由既有 M3 Step 2 mapping 证据反查投影每枚标准的激活领域集（零新真值源、零改推理算法、
+      零新增标准收录与限值）；IC-10 契约同批升 v1.15.0）
+      v1.12（2026-11-13，CG-20261113-006：激活表补「医院｜走廊吊顶」一行，域集与病房吊顶同值
+      （fire/acceptance/prefab）；该场景此前退 M6 最小集，实测适用标准集 6→9 条、差集为 prefab 域三条。
+      零改 Step 1a 算法、零改 SPACE_ALIASES、零新增标准收录与限值）
+      v1.11（2026-10-27，CG-20261027-007：入口语言与规则表对齐——激活表补办公隔墙两行／办公湿区一行，
       办公地面补 acoustic(impact)；Step 1a 增需求词归一（空气声隔声→隔声 等）并把子域取序定为
       **显式需求词优先、构件/空间语义兜底**（楼地面/吊顶 → 显式吸声 → 墙体 → 教室/办公兜底 → 通用；
       独立复核当场判出「墙体一律前置会使显式吸声对墙类空间不可达」，故不许把墙体支放在显式吸声之前）；
@@ -14,14 +20,14 @@ SRE Reasoner —— 标准推理引擎参考实现
       命中即 activation／mapping 证据置信度降 inferred ＋「未覆盖领域」载显式标注，闭台账 PL-198 ②）
       v1.8（2026-09-26，CG-20260926-010：名称取数改 SOT 优先——主表 > 登记表 > 硬编码预置，闭 PL-002）
       v1.7（2026-09-17，CG-20260917-009：复查到期仅提醒，既有依据未确认仍降级）
-依据：standards-reasoning-rules.md v1.4.0 + interface-contracts.md IC-10 v1.9.0
+依据：standards-reasoning-rules.md v1.4.0 + interface-contracts.md IC-10 v1.15.0
 
 最小接口：
     reason(project_type, space_type, location=None, system=None,
            demands=None, return_trace=False) -> dict
 
-输出符合 IC-10-Response Schema v1.9.0，包含：
-- 适用标准集（条目含 时间状态 与可选 状态注记）
+输出符合 IC-10-Response Schema v1.15.0，包含：
+- 适用标准集（条目含 时间状态 与可选 状态注记／激活领域）
 - 推理路径
 - 证据对象（至少一条；依据未确认者降级，单纯复查到期仅在 applicability 证据中提醒）
 - 未覆盖领域（可选）
@@ -31,6 +37,7 @@ SRE Reasoner —— 标准推理引擎参考实现
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -143,6 +150,9 @@ ACTIVATION_TABLE: dict[tuple[str, str], list[str]] = {
     ("学校", "教室地面"): ["acoustic(impact)", "acceptance"],
     ("医院", "手术部/洁净吊顶"): ["fire", "environmental", "acceptance", "prefab"],
     ("医院", "病房吊顶"): ["fire", "acceptance", "prefab"],
+    # CG-20261113-006：走廊吊顶此前无行，稳定退 M6 最小集（实测 6 条 vs 病房吊顶 9 条，
+    # 差集＝prefab 域三条）。域集与病房吊顶同值；不建「走廊→走廊吊顶」别名，因走廊亦可为隔墙场景。
+    ("医院", "走廊吊顶"): ["fire", "acceptance", "prefab"],
     ("酒店", "客房吊顶"): ["acoustic(贡献)", "fire", "acceptance", "prefab"],
     ("住宅", "厨卫集成吊顶"): ["acceptance", "prefab", "environmental", "waterproof(边界)"],
     ("住宅", "户内吊顶"): ["acceptance", "prefab"],
@@ -1136,6 +1146,33 @@ def _external_collab_entry(
 # 主入口
 # ---------------------------------------------------------------------------
 
+def _project_activation_domains(applied: list[dict], evidence_list: list[dict]) -> None:
+    """PL-301 ①（CG-20261116-006）：由既有 mapping 证据反查每枚标准的激活领域集，
+    投影进条目可选字段 `激活领域`（升序去重）。取值源＝Step 2 已生成的 mapping 证据
+    （零新真值源）；未被任何域激活的条目省略本字段。外协占位串（「（」前缀）不入投影。
+    """
+    domain_by_std: dict[str, set[str]] = {}
+    for ev in evidence_list:
+        if ev.get("证据类型") != "mapping":
+            continue
+        fact = ev.get("输入事实", "")
+        conclusion = ev.get("输出结论", "")
+        if not fact.startswith("领域=") or not conclusion.startswith("标准族="):
+            continue
+        domain = fact[len("领域="):].split(",", 1)[0].strip()
+        try:
+            family = ast.literal_eval(conclusion[len("标准族="):])
+        except (ValueError, SyntaxError):
+            continue
+        for s in family:
+            if isinstance(s, str) and not s.startswith("（"):
+                domain_by_std.setdefault(s.strip(), set()).add(domain)
+    for item in applied:
+        domains = domain_by_std.get(item["标准编号"])
+        if domains:
+            item["激活领域"] = sorted(domains)
+
+
 def reason(
     project_type: str,
     space_type: str,
@@ -1204,6 +1241,9 @@ def reason(
 
     # Step 5 排序
     applied.sort(key=lambda x: (_role_priority(x["角色"]), x["层级"], x["标准编号"]))
+
+    # PL-301 ①：维度轴投影（mapping 证据已在 Step 2 生成，时序上先于本处）
+    _project_activation_domains(applied, evidence_list)
 
     # 推理路径
     reasoning_path = (

@@ -51,13 +51,30 @@ DEFAULT_INDEX = ROOT / L.INDEX_REL
 SCHEMA = "citation-ledger/v1"
 
 # 标准号族。前缀分族（GB／GB/T 是两族，由 /T 决定），编号保留分部号（10801.2），年号可缺。
+# 省代码只在后随斜杠时吸收（DB4401/T、DB 33/T），裸 DBJ|DB 须带 (?!\d) 防回溯把散文「DB21 发布文本」裂成「DB2 1」。
+# 复合编号（省码-序号）限省码恰 2 位且后随年号或边界，否则 T/CSUS 03-2019 被切成 03-201、GBJ2－86 被切成 2-86。
+# 第二成分本身即两位年号且落边界时不得读作序号：JGJ24-86 是编号 24＋年号 1986，不是复合编号「24-86」。
+_SEP = r"[-—–－]"
+_YEAR = r"(?:19|20)\d{2}|[5-9]\d"
+_COMPOUND = (r"\d{2}(?:\.\d{1,3})?" + _SEP
+             + r"(?![5-9]\d\s*(?![\d.]))"
+             + r"\d{1,3}(?=\s*" + _SEP + r"\s*(?:" + _YEAR + r")|\s*(?![\d.]))")
 STD_RE = re.compile(
     r"(?<![A-Za-z0-9])"
-    r"(T\s*/\s*CECS|RISN\s*[-—]\s*TG|DBJ?\s*\d{2,6}|GBJ|GB|JGJ|JG|JC|CJJ|CJ|CECS)"
-    r"\s*(/\s*T)?\s*"
-    r"(\d{1,6}(?:\.\d{1,3})?)"
-    r"(?:\s*[-—–]\s*((?:19|20)\d{2}))?"
+    r"(T\s*/\s*(?:CECS|CSUS|CBDA)|RISN\s*" + _SEP + r"\s*TG"
+    r"|DBJ\s*\d{2,4}(?=\s*/)|DB\s*\d{2,4}(?=\s*/)|DBJ(?=\d{2}\s*" + _SEP + r")|DBJ(?!\d)|DB(?!\d)"
+    r"|GBJ|GB|JGJ|JG|JC|CJJ|CJ|CECS|SJG|QB|HG|HJ)"
+    r"(?:\s*/\s*(T)?)?\s*"
+    r"((?:" + _COMPOUND + r")|(?:\d{1,6}(?:\.\d{1,3})?))"
+    r"(?:\s*" + _SEP + r"\s*(" + _YEAR + r"))?"
 )
+
+ATLAS_RE = re.compile(
+    r"(?<![A-Za-z0-9])"
+    r"(\d{2}(?!T\d)[A-Z]{1,3}\d{2,3}(?:[-—–－]\d{1,2})?)"
+    r"(?![A-Za-z0-9])"
+)
+ATLAS_PREFIX = "图集"
 
 STATUS_PREFIXES = ("现行有效", "即将实施", "过渡期", "已废止", "被部分替代", "被部分废止", "被替代")
 DEAD_PREFIXES = ("已废止", "被替代")
@@ -79,6 +96,16 @@ def norm_prefix(raw: str, t_flag: str | None) -> str:
     return p + ("/T" if t_flag else "")
 
 
+def norm_year(y: str | None) -> str | None:
+    """两位年号归一 19xx（中国标准两位年号只见于 1950s—1990s）；不归一则废止旧版被判「现行有效」。"""
+    return f"19{y}" if y and len(y) == 2 else y
+
+
+def norm_num(n: str) -> str:
+    """编号内全角／长连字符归一 ASCII，使 `DBJ 46－061` 与 `DBJ 46-061` 同键（索引侧用全角）。"""
+    return re.sub(r"[—–－]", "-", n)
+
+
 # OCR/排版常见异写：`GB T33544`／`GBT33544`／`GB / T 33544` → `GB/T 33544`。
 # 只归一「前缀＋T＋数字」三连，不碰正文里的字母 T。
 _T_GLUE = re.compile(r"(?<![A-Za-z])(GBJ|GB|JGJ|JG|JC|CJJ|CJ|DBJ?\d{0,6})(\s*/\s*|\s*)T(?=\s*\d)")
@@ -91,8 +118,11 @@ def prettify(line: str) -> str:
 def iter_citations(text: str):
     """产出 (prefix, num, year_or_None, line_no, line_text)。"""
     for i, line in enumerate(text.splitlines(), 1):
-        for m in STD_RE.finditer(prettify(line)):
-            yield norm_prefix(m.group(1), m.group(2)), m.group(3), m.group(4), i, line
+        pline = prettify(line)
+        for m in STD_RE.finditer(pline):
+            yield norm_prefix(m.group(1), m.group(2)), norm_num(m.group(3)), norm_year(m.group(4)), i, line
+        for m in ATLAS_RE.finditer(pline):
+            yield ATLAS_PREFIX, norm_num(m.group(1)), None, i, line
 
 
 def key_of(prefix: str, num: str) -> str:
@@ -109,16 +139,27 @@ def parse_index(text: str) -> dict:
         if len(cells) < 3 or not cells[0].isdigit():
             continue
         m = STD_RE.search(cells[1])
-        if not m:
+        if m:
+            status = next((c for c in cells[2:] if c.startswith(STATUS_PREFIXES)), None)
+            if status is None:
+                continue
+            k = key_of(norm_prefix(m.group(1), m.group(2)), norm_num(m.group(3)))
+            out.setdefault(k, {
+                "seq": cells[0], "name": cells[2], "year": norm_year(m.group(4)),
+                "status": status, "line": i,
+            })
             continue
-        status = next((c for c in cells[2:] if c.startswith(STATUS_PREFIXES)), None)
-        if status is None:
-            continue
-        k = key_of(norm_prefix(m.group(1), m.group(2)), m.group(3))
-        out.setdefault(k, {
-            "seq": cells[0], "name": cells[2], "year": m.group(4),
-            "status": status, "line": i,
-        })
+        am = ATLAS_RE.search(cells[1])
+        if am:
+            status = next((c for c in cells[2:] if c.startswith(STATUS_PREFIXES)), None)
+            if status is None:
+                continue
+            year = cells[3] if len(cells) > 3 and re.fullmatch(r"(?:19|20)\d{2}", cells[3]) else None
+            k = key_of(ATLAS_PREFIX, norm_num(am.group(1)))
+            out.setdefault(k, {
+                "seq": cells[0], "name": cells[2], "year": year,
+                "status": status, "line": i,
+            })
     return out
 
 

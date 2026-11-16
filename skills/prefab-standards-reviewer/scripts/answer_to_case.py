@@ -11,12 +11,16 @@
 用法（cwd＝本工具所在目录）：
   python -B answer_to_case.py --answer a.md --title "…" --project "…" --out draft.json
   python -B answer_to_case.py --answer a.md --conclusion-conditions cond.json …（按结论 id 注入 conditions）
+  python -B answer_to_case.py --exit-gate a.md --receipt 回执.json --out 交付件.json
+  python -B answer_to_case.py --review-report --standards-ledger 台账.json --findings 问题.json \
+      --standards-sources 被评审文件… --out 评审件.html --receipt 回执.json
   python -B answer_to_case.py --selftest
 """
 from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import html
 import json
 import re
@@ -523,33 +527,62 @@ def _card_desc(r: dict) -> str:
 
 def _standards_enrichment(rows: list[dict], index_text: str, *, fetch_missing: bool = False,
                           fetch_budget: float = 30.0, fetch_total: float = 120.0):
-    """对台账中「索引外且未声明」的行查证据卡；只读缓存，判定不变。"""
+    """对台账**逐行**查证据卡（索引内行也查）；只读缓存，判定不变。
+
+    返回 `(stats, lines, states)`。`states` 逐行给 `{key, indexed, state}`，供回执随件落盘。
+    索引内行只报状态、不进 `--fetch-missing` 取真面（取真射程仍是索引外未声明行）。
+
+    动因（CG-20261112-002 §4.2 实测）：原实现对索引内行 `continue` 不查卡，而全仓唯一那枚卡
+    恰在索引内 ⇒ 卡消费次数结构性为 0。本函数只补提示层读数，不新增判定轴。
+    """
     from citation_ledger import parse_index
     import on_demand_retrieval as O
 
     index = parse_index(index_text)
-    stats = {"indexed": 0, "cached": 0, "stale": 0, "missing": 0, "declared": 0}
+    stats = {"indexed": 0, "cached": 0, "stale": 0, "missing": 0, "declared": 0,
+             "indexed_cached": 0, "indexed_stale": 0, "indexed_missing": 0}
     lines: list[tuple[str, str]] = []
+    states: list[dict] = []
+    state_of: dict[str, dict] = {}
+    fetchable: list[int] = []
+
+    def _expired(r: dict) -> str:
+        exp = ((r.get("card") or {}).get("cache") or {}).get("expires_at")
+        return f"证据卡已过期（到期 {exp}），可 retrieve --refresh"
+
     for row in rows:
         key = row.get("key")
         if not key:
             continue
-        if key in index:
-            stats["indexed"] += 1
-            continue
-        if row.get("mention") or row.get("external") or row.get("ack"):
+        indexed = key in index
+        if not indexed and (row.get("mention") or row.get("external") or row.get("ack")):
             stats["declared"] += 1
+            st = {"key": key, "indexed": False, "state": "declared"}
+            states.append(st)
+            state_of[key] = st
             continue
         r = O.lookup_card(CARD_ROOT, key)
-        if r["state"] == "valid":
-            stats["cached"] += 1
+        state = r["state"]
+        st = {"key": key, "indexed": indexed, "state": state}
+        states.append(st)
+        state_of[key] = st
+        bucket = {"valid": "cached", "stale": "stale"}.get(state, "missing")
+        if indexed:
+            stats["indexed"] += 1
+            stats["indexed_" + bucket] += 1
+            if state == "valid":
+                lines.append((key, f"证据卡 {_card_desc(r)}"))
+            elif state == "stale":
+                lines.append((key, _expired(r)))
+            continue
+        stats[bucket] += 1
+        if state == "valid":
             lines.append((key, f"证据卡 {_card_desc(r)}"))
-        elif r["state"] == "stale":
-            stats["stale"] += 1
-            exp = ((r.get("card") or {}).get("cache") or {}).get("expires_at")
-            lines.append((key, f"证据卡已过期（到期 {exp}），可 retrieve --refresh"))
+        elif state == "stale":
+            fetchable.append(len(lines))
+            lines.append((key, _expired(r)))
         else:
-            stats["missing"] += 1
+            fetchable.append(len(lines))
             lines.append((key, "无有效证据卡（可加 --fetch-missing 取真）"))
 
     if fetch_missing:
@@ -557,9 +590,8 @@ def _standards_enrichment(rows: list[dict], index_text: str, *, fetch_missing: b
         import time
         started = time.monotonic()
         engine = Path(__file__).with_name("on_demand_retrieval.py")
-        for i, (key, desc) in enumerate(lines):
-            if "无有效证据卡" not in desc and "已过期" not in desc:
-                continue
+        for i in fetchable:
+            key, desc = lines[i]
             left = fetch_total - (time.monotonic() - started)
             if left <= 5:
                 lines[i] = (key, f"{desc}（总预算耗尽，未取真）")
@@ -570,9 +602,240 @@ def _standards_enrichment(rows: list[dict], index_text: str, *, fetch_missing: b
             r2 = O.lookup_card(CARD_ROOT, key)
             if r2["state"] == "valid":
                 lines[i] = (key, f"取真成功；证据卡 {_card_desc(r2)}")
+                prev = state_of[key]["state"]
+                stats[{"valid": "cached", "stale": "stale"}.get(prev, "missing")] -= 1
+                stats["cached"] += 1
+                state_of[key]["state"] = "valid"
             else:
                 lines[i] = (key, f"取真未达有效证据卡（exit {p.returncode}）")
-    return stats, lines
+    return stats, lines, states
+
+
+def audit_standards(led: dict, index_text: str, *, sources: dict | None = None,
+                    strict: bool = False, fetch_missing: bool = False,
+                    fetch_budget: float = 30.0, fetch_total: float = 120.0,
+                    tool: str = "answer_to_case.py --exit-gate") -> dict:
+    """四轴核验＋逐行卡补证 → 随件回执块（交付件 `standards` 字段）。
+
+    判定全部由 `citation_ledger.verify()` 承担，本函数不改判、不新增判定轴；
+    计数一律由判定明细与台账现算，不接受手写字面（契约由 `validate_standards` 承担）。
+    `mode`：给了源文件＝review（评审类，须双向覆盖），否则＝qa（技术答疑类）。
+    """
+    from citation_ledger import parse_index, verify
+    from deliverable_render import REVIEW_QUALIFICATION
+
+    results = verify(led, index_text, sources, tolerate_unindexed=not strict)
+    stats, lines, states = _standards_enrichment(
+        led.get("rows") or [], index_text, fetch_missing=fetch_missing,
+        fetch_budget=fetch_budget, fetch_total=fetch_total)
+    indexed_of = {s["key"]: s["indexed"] for s in states}
+    rows = led.get("rows") or []
+    red = sum(1 for lv, _ in results if lv == "FAIL")
+    return {
+        "ledger": led,
+        "verification": {
+            "mode": "review" if sources is not None else "qa",
+            "strict": bool(strict),
+            "index_keys": sorted(parse_index(index_text)),
+            "red": red,
+            "yellow": sum(1 for lv, _ in results if lv == "WARN"),
+            "green": sum(1 for lv, _ in results if lv == "OK"),
+            "unverified": sum(1 for r in rows
+                              if not (r.get("cited_years") or []) or not indexed_of.get(r["key"])),
+            "unindexed_undeclared": sum(1 for s in states if not s["indexed"] and s["state"] != "declared"),
+            "results": [[lv, m] for lv, m in results],
+        },
+        "cards": dict(stats, states=states, lines=[[k, d] for k, d in lines]),
+        "qualification": REVIEW_QUALIFICATION,
+        "gate": {
+            "verdict": "FAIL" if red else "PASS",
+            "tool": tool,
+            "ran_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        },
+    }
+
+
+def _print_cards(st: dict) -> None:
+    c = st["cards"]
+    print(f"标准引用补证：索引内 {c['indexed']}（卡有效 {c['indexed_cached']}／过期 {c['indexed_stale']}"
+          f"／无卡 {c['indexed_missing']}）｜索引外未声明 有效 {c['cached']}｜过期 {c['stale']}"
+          f"｜无卡 {c['missing']}｜已声明外源 {c['declared']}")
+    for key, desc in c["lines"]:
+        print(f"  - {key}：{desc}")
+
+
+def _stamp_contract(st: dict) -> None:
+    """回执随件带「随件块契约」判定（第三轮 N26）：gate 只反映引用核验，块自身契约须同件可读。"""
+    from deliverable_render import validate_standards
+
+    errs = validate_standards(st)
+    st["standards_contract"] = {"verdict": "FAIL" if errs else "PASS", "errors": errs}
+
+
+def _write_receipt(args, st: dict | None, case: dict | None = None) -> bool:
+    """回执随件落盘：`--receipt` 写回执 JSON，`--out` 写带 standards 的交付件本体（不只在 stdout）。
+
+    返回 False＝请求了本体但被拒写（红件或合并后契约不过），调用方须据此判红，不得照印 PASS。
+    本体落盘前重跑 `validate_case`：主流程只校了不含 standards 的 case，合并块须另校。
+    """
+    if st is None:
+        return True
+    _stamp_contract(st)
+    if args.receipt:
+        p = Path(args.receipt)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes((json.dumps(st, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+        print(f"出口闸回执：{p}")
+    if args.out and case is not None:
+        if st["gate"]["verdict"] != "PASS":
+            print("交付件本体未落盘：出口闸 FAIL——红件不得以交付件本体形式落盘（回执仍留作判定证据）",
+                  file=sys.stderr)
+            return False
+        merged = dict(case, standards=st)
+        errs = validate_case(merged)
+        if errs:
+            print(f"交付件本体未落盘：契约 FAIL（{len(errs)} 项）——{errs[0]}", file=sys.stderr)
+            return False
+        p = Path(args.out)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes((json.dumps(merged, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+        print(f"交付件本体（台账随件）：{p}")
+    return True
+
+
+def _ledger_closure_errors(led: dict, src_map: dict, srcs: list) -> list[str]:
+    """评审档台账须逐枚等于被评审文件的实抽结果（键集／引用点／年号／提及／外源标记／输入身份）。
+
+    动因＝独立复核第一轮 B1/B2：行级 count 与 external 标记原先不受任何约束，手改一个整数
+    即可让对外评审件报假引用点，手改一个布尔即可把编造键降为 WARN 放行。`collect()` 的 hits
+    未截断（截断只发生在 build_ledger 写 rows 时），故可逐枚复算；不闭合即 fail-closed。
+    第二轮 B4 补 `ack`：它与 external 同族、同为 verify 的降级杠杆，而 `collect()` 根本不产它，
+    故评审档出现 ack 一律判不闭合（未收录声明须走 findings 并附理由，不得改台账标记）。
+    第二轮 N13 补输入身份：`inputs` 逐枚对**实际读到的文件**重算指纹，伪造 sha256/bytes 即不闭合。
+    射程外（据实声明）：`rows[].hits` 整块（写盘时已截断至 5 条，无法与实抽全量对撞）。
+    本函数只用于评审档（台账登记的对象就是被评审文件）；答疑档台账是交付物自己的引用，
+    与源文件的差属漏引／归因判定轴，不得用闭合校验抹掉。
+    """
+    from citation_ledger import _input_fingerprint
+
+    errs: list[str] = []
+    rows = {r["key"]: r for r in led.get("rows") or [] if isinstance(r, dict) and r.get("key")}
+    if set(rows) != set(src_map):
+        errs.append(f"键集不闭合：台账多 {sorted(set(rows) - set(src_map))}｜缺 {sorted(set(src_map) - set(rows))}")
+    for k in sorted(set(rows) & set(src_map)):
+        r, s = rows[k], src_map[k]
+        if (r.get("count") or 0) != len(s["hits"]):
+            errs.append(f"{k} 引用点 {r.get('count')} ≠ 源文件实抽 {len(s['hits'])}")
+        if sorted(str(y) for y in (r.get("cited_years") or [])) != sorted(s["years"]):
+            errs.append(f"{k} 年号 {r.get('cited_years')} ≠ 源文件实抽 {sorted(s['years'])}")
+        if bool(r.get("mention")) != bool(s["mention"]):
+            errs.append(f"{k} 提及标记与源文件实抽不符")
+        if bool(r.get("external")) != bool(s["external"]):
+            errs.append(f"{k} 外源标记与源文件实抽不符")
+        if r.get("ack"):
+            errs.append(f"{k} 带人工「未收录已声明」标记（ack）：评审档台账须为被评审文件实抽，"
+                        f"未收录声明须走 findings 并附理由")
+    want = {str(Path(p).resolve()): _input_fingerprint(Path(p)) for p in srcs}
+    got = {str(Path(it.get("path", "")).resolve()): it for it in (led.get("inputs") or [])
+           if isinstance(it, dict)}
+    if set(got) != set(want):
+        errs.append(f"输入件集不闭合：台账多 {sorted(set(got) - set(want))}｜缺 {sorted(set(want) - set(got))}")
+    for p in sorted(set(got) & set(want)):
+        for f in ("bytes", "sha256"):
+            if got[p].get(f) != want[p][f]:
+                errs.append(f"输入身份不符：{Path(p).name} 的 {f} {got[p].get(f)!r} ≠ 实读 {want[p][f]!r}")
+    return errs
+
+
+def _review_report(ap, args) -> int:
+    """文件评审件：机算台账 → 闭合校验 → 四轴核验 → 渲染 → 回执。问题条目由 `--findings` 数据给。
+
+    闸的两道（独立复核第一轮 B2 后重写，不再用「带源／不带源判词差集」取阻断集——该差集会被
+    前缀碰撞与 external 降级吞掉编造键的红）：
+      ① **闭合校验**：台账须逐枚等于被评审文件实抽（`_ledger_closure_errors`：键集／引用点／年号／
+         提及／外源／ack 标记／输入件身份指纹），不闭合 rc=2 不渲染；
+         由此评审件自身不可能带入编造键／假引用点／假外源标记／假「已声明」标记／假输入身份。
+      ② **契约校验**：`validate_review`（含 standards 复算级＋成员级判据），红 rc=1 不渲染。
+    过闸后，L1—L3 的红（身份／版本／前缀）属**被评审文件**的引用问题＝评审发现，随件报出、不阻断出具；
+    此时 L4 覆盖轴因闭合而结构性为空，故不存在「覆盖轴红」这一阻断类。口径句据实印，不再一律归因。
+    回执另带 `review_contract`（第二轮 N15）：`gate` 只反映引用核验，契约判定须同件可读，
+    否则单独读回执会把「契约 FAIL 未渲染」误读成已放行。
+    交付射程（第三轮 N27／第四轮 N38）：**对外交付面＝HTML 单件**；随件 `.json` 与回执含未脱敏
+    verify 判词全文（内部编号／仓内路径／检索串／档位码），属内部判定证据，不得随 HTML 一并交付。
+    """
+    from citation_ledger import LedgerError, collect
+    from deliverable_render import REVIEW_SCHEMA, render_review, validate_review
+
+    if not args.standards_ledger or not args.findings or not args.out:
+        ap.error("--review-report 需要 --standards-ledger、--findings 与 --out")
+    if not args.standards_sources:
+        ap.error("--review-report 需要 --standards-sources（评审须对被评审文件做双向覆盖与闭合校验）")
+    led_path, find_path = Path(args.standards_ledger), Path(args.findings)
+    for p in (led_path, find_path):
+        if not p.exists():
+            print(f"评审件 FAIL：输入不存在（{p}）", file=sys.stderr)
+            return 2
+    srcs = [Path(p) for p in args.standards_sources]
+    absent = [str(p) for p in srcs if not p.exists()]
+    if absent:
+        print(f"评审件 FAIL：被评审文件不在场 {absent}——不得以跳过冒充通过", file=sys.stderr)
+        return 2
+    try:
+        led = json.loads(led_path.read_text(encoding="utf-8"))
+        rep = json.loads(find_path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as e:
+        print(f"评审件 FAIL：输入不可解析（{e}）", file=sys.stderr)
+        return 2
+    if not (led.get("rows") or []):
+        print("评审件 FAIL：台账零引用——不产回执，不冒充已核验", file=sys.stderr)
+        return 2
+    closure = _ledger_closure_errors(led, collect(srcs), srcs)
+    if closure:
+        print(f"评审件 FAIL：台账与被评审文件不闭合（{len(closure)} 项）——附录须登记被评审文件的实抽引用，不得手改",
+              file=sys.stderr)
+        for x in closure[:10]:
+            print(f"  - {x}", file=sys.stderr)
+        return 2
+    index_text = INDEX_PATH.read_text(encoding="utf-8")
+    try:
+        st = audit_standards(led, index_text, sources=collect(srcs), strict=args.strict_standards,
+                             fetch_missing=args.fetch_missing, fetch_budget=args.fetch_budget,
+                             fetch_total=args.fetch_total, tool="answer_to_case.py --review-report")
+    except LedgerError as e:
+        print(f"评审件 FAIL：引用台账无法判定（{e}）", file=sys.stderr)
+        return 2
+    rep = dict(rep, schema=REVIEW_SCHEMA, standards=st)
+    errs = validate_review(rep)
+    st["review_contract"] = {"verdict": "FAIL" if errs else "PASS", "errors": errs}
+    _stamp_contract(st)
+    if args.receipt:
+        p = Path(args.receipt)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes((json.dumps(st, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+        print(f"出口闸回执：{p}")
+    v = st["verification"]
+    pts = sum(r.get("count") or 0 for r in led["rows"])
+    print(f"引用核验：{'FAIL' if v['red'] else 'PASS'}｜红 {v['red']}｜黄 {v['yellow']}｜绿 {v['green']}"
+          f"｜未核 {v['unverified']} 枚｜索引外未声明 {v['unindexed_undeclared']} 枚"
+          f"｜台账 {len(led['rows'])} 枚／{pts} 引用点｜闭合校验 PASS")
+    _print_cards(st)
+    if errs:
+        print(f"评审件契约 FAIL（{len(errs)} 项）：不渲染", file=sys.stderr)
+        for x in errs:
+            print(f"  - {x}", file=sys.stderr)
+        return 1
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    data_path = out.with_suffix(".json")
+    raw = (json.dumps(rep, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    data_path.write_bytes(raw)
+    out.write_bytes(render_review(rep, hashlib.sha256(raw).hexdigest(), data_path.name).encode("utf-8"))
+    print(f"评审件契约 PASS｜问题 {len(rep['findings'])} 项｜数据 {data_path}｜渲染 {out}")
+    print("  交付射程：对外交付面＝HTML 单件；随件 .json 与回执含未脱敏判词全文，属内部判定证据，不得随 HTML 一并交付。")
+    if v["red"]:
+        print(f"  口径：红 {v['red']} 项均属被评审文件的引用问题（台账已与被评审文件逐枚闭合，评审发现随件报出）；"
+              f"本件自身诚实性由闭合校验与契约承担。")
+    return 0
 
 
 def main(argv: list[str]) -> int:
@@ -599,7 +862,9 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--exit-gate", metavar="ANSWER_MD",
                     help="交付出口闸：解析答复并跑契约校验，绿才允许交付；红列出违例供修订")
     ap.add_argument("--standards-ledger", metavar="LEDGER_JSON",
-                    help="可选：标准引用台账（citation_ledger.py extract 产物），随出口闸跑引用核验")
+                    help="可选：标准引用台账（citation_ledger.py extract 产物），随出口闸跑引用核验。"
+                         "两档差异：评审档（--review-report）禁 ack／external 手改（闭合校验逐枚对实抽）；"
+                         "答疑/出口闸档 ack/external 为显式声明通道，须调用方自负理由")
     ap.add_argument("--standards-sources", nargs="+", metavar="TXT",
                     help="可选：源文件文本；给出时对台账施加「漏引／归因错误」双向覆盖判据")
     ap.add_argument("--strict-standards", action="store_true",
@@ -608,10 +873,24 @@ def main(argv: list[str]) -> int:
                     help=f"对无有效证据卡的索引外引用联网取真（默认关；证据卡写入 {L.CARD_DIR_REL.as_posix()}/）")
     ap.add_argument("--fetch-budget", type=float, default=30.0, help="每枚取真预算秒（默认 30）")
     ap.add_argument("--fetch-total", type=float, default=120.0, help="取真总预算秒（默认 120）")
+    ap.add_argument("--receipt", metavar="OUT_JSON",
+                    help="出口闸回执落盘（红/黄/绿＋未核项数＋索引外未声明枚数＋卡消费＋定性声明＋"
+                         "standards_contract 随件块契约判定）。回执属内部判定证据：含未脱敏 verify 判词全文，不得对外交付")
+    ap.add_argument("--review-report", action="store_true",
+                    help="文件评审件：机算台账＋--findings 数据 → 单文件 HTML（业务参考、非正式文件）。"
+                         "对外交付面＝HTML 单件；同目录随件 .json 与回执含未脱敏判词全文（内部编号／仓内路径／检索串／档位码），"
+                         "属内部判定证据，不得随 HTML 一并交付")
+    ap.add_argument("--findings", metavar="JSON",
+                    help="评审问题条目数据（prefab-review/v1 的 meta 与 findings；客户专属内容由此给，不入工具）。"
+                         "口径：meta/findings 是调用方数据，工具只转写不脱敏（被评审对象自己的分级如 S0～S3 属评审内容，"
+                         "一律剥掉会毁掉结论）；内部编号/仓内路径/URL 须由调用方在数据里自行清除。"
+                         "工具承担脱敏的只有 verify 判词（内嵌索引状态散文）")
     args = ap.parse_args(argv)
 
     if args.selftest:
         return _selftest()
+    if args.review_report:
+        return _review_report(ap, args)
     if args.exit_gate:
         path = Path(args.exit_gate)
         text = path.read_text(encoding="utf-8")
@@ -630,6 +909,7 @@ def main(argv: list[str]) -> int:
         if led_path is not None and not led_path.exists():
             print(f"出口闸 FAIL：标准引用台账不存在（{led_path}）", file=sys.stderr)
             return 2
+        st = None
         try:
             led = (json.loads(led_path.read_text(encoding="utf-8")) if led_path is not None
                    else ledger_from_texts({path.name: text}))
@@ -638,23 +918,24 @@ def main(argv: list[str]) -> int:
                 print("标准引用：0 枚（本件不含标准号，跳过引用核验）")
             else:
                 index_text = INDEX_PATH.read_text(encoding="utf-8")
-                results = verify(
-                    led, index_text,
-                    collect([Path(p) for p in args.standards_sources]) if args.standards_sources else None,
-                    tolerate_unindexed=not args.strict_standards)
+                sources = (collect([Path(p) for p in args.standards_sources])
+                           if args.standards_sources else None)
                 try:
-                    stats, card_lines = _standards_enrichment(
-                        led.get("rows") or [], index_text,
-                        fetch_missing=args.fetch_missing,
-                        fetch_budget=args.fetch_budget, fetch_total=args.fetch_total)
-                    print(f"标准引用补证：索引内 {stats['indexed']}｜证据卡有效 {stats['cached']}｜"
-                          f"过期 {stats['stale']}｜无卡 {stats['missing']}｜已声明外源 {stats['declared']}")
-                    for key, desc in card_lines:
-                        print(f"  - {key}：{desc}")
+                    st = audit_standards(led, index_text, sources=sources, strict=args.strict_standards,
+                                         fetch_missing=args.fetch_missing,
+                                         fetch_budget=args.fetch_budget, fetch_total=args.fetch_total)
+                except LedgerError:
+                    raise
                 except Exception as e:
                     print(f"标准引用补证：跳过（{e}）", file=sys.stderr)
+                if st is None:
+                    results = verify(led, index_text, sources, tolerate_unindexed=not args.strict_standards)
+                else:
+                    results = [tuple(x) for x in st["verification"]["results"]]
+                    _print_cards(st)
                 hard = [m for lv, m in results if lv == "FAIL"]
                 if hard:
+                    _write_receipt(args, st, case)
                     print(f"出口闸 FAIL（标准引用 {len(hard)} 项）：修订答复或台账后重跑", file=sys.stderr)
                     for m in hard:
                         print(f"  - {m}", file=sys.stderr)
@@ -663,8 +944,15 @@ def main(argv: list[str]) -> int:
         except LedgerError as e:
             print(f"出口闸 FAIL：引用台账无法判定（{e}）", file=sys.stderr)
             return 2
+        if not _write_receipt(args, st, case):
+            print("出口闸 FAIL：交付件本体未落盘（理由见上）——不得读作已放行", file=sys.stderr)
+            return 1
+        # 第四轮 N33：只给 --receipt 时块契约 FAIL 不影响返回值，stdout 须同句限定，不得单读误作已放行
+        sc = (st or {}).get("standards_contract") or {}
+        qual = (f"｜随件块契约 FAIL（{len(sc.get('errors') or [])} 项）——见回执 standards_contract；"
+                f"引用核验本身 PASS" if sc.get("verdict") == "FAIL" else "")
         print(f"出口闸 PASS：{path.name} ｜ 结论 {len(case['conclusions'])} 条 ｜ 对外必答 "
-              f"{sum(1 for g in case['gaps'] if g.get('external') and g.get('kind', 'ask') == 'ask')} 条")
+              f"{sum(1 for g in case['gaps'] if g.get('external') and g.get('kind', 'ask') == 'ask')} 条{qual}")
         return 0
     if args.apply_review:
         if not args.sheet_inputs:

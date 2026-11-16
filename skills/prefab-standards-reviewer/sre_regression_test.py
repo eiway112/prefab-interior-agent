@@ -1,7 +1,9 @@
 """
 SRE Reasoner 回归测试集
 ========================
-版本：v1.13（2026-10-25：Windows 控制台/管道下 run_and_report 先重配置 stdout/stderr 为 UTF-8；84 例与判据不变）
+版本：v1.14（2026-11-13：CG-20261113-006 新增 TestHospitalCorridorCeiling 两例（89→91 例）——
+      医院走廊吊顶命中激活表行且激活 prefab、标准集与病房吊顶相等；撤该激活行两例同时复红）
+      v1.13（2026-10-25：Windows 控制台/管道下 run_and_report 先重配置 stdout/stderr 为 UTF-8；84 例与判据不变）
       v1.12（2026-10-17：CG-20261017-006 台账 PL-200 裁定①「公寓按住宿期限分流（甲）」实施批——
 守卫组 TestProjectTypeAnalogy 由九例扩为十三例（79→84 例）。三支按「公寓→住宅」写死期望值的例
 同批改判（其中两支改名，旧名→新名映射见该组 docstring，映射不留第二处）：正向例改为
@@ -199,6 +201,18 @@ def _contract_ic10_role_enum() -> list[str]:
     契约缺失或正则脱靶时返回空表——调用方按"全表越界"失败收口，不静默放行。
     """
     match = re.search(r'"角色":\s*\{[^{}]*?"enum":\s*\[([^\]]*)\]', _contract_text(), re.S)
+    if not match:
+        return []
+    return [s.strip().strip('"') for s in match.group(1).split(",") if s.strip()]
+
+
+def _contract_ic10_domain_enum() -> list[str]:
+    """IC-10 `适用标准集[].激活领域` 逐项合法集（从契约 Schema 现读，本文件不留字面量副本）。
+
+    枚举嵌在 items 内，故用非贪婪跨层匹配取该键后首枚 enum；契约缺失或脱靶返回空表，
+    调用方按"全表越界"失败收口，不静默放行（沿 _contract_ic10_role_enum 同款）。
+    """
+    match = re.search(r'"激活领域":\s*\{.*?"enum":\s*\[([^\]]*)\]', _contract_text(), re.S)
     if not match:
         return []
     return [s.strip().strip('"') for s in match.group(1).split(",") if s.strip()]
@@ -575,6 +589,12 @@ class TestM3ScenarioReasoning(unittest.TestCase):
         self.assertIn("GB 55038-2025", stds)
         self.assertIn("GB 55037-2022", stds)
         self.assertIn("GB 50210-2018", stds)
+        # PL-301 ①（CG-20261116-006）多域激活向：开线 brief 例题参数下，
+        # GB 50118-2010 由 acoustic 与 acoustic(吸声) 两域激活、07CJ03-1 由 acceptance 与 acoustic 两域激活
+        r2 = reason("住宅", "分户墙", "上海", "轻钢龙骨", ["隔声", "吸声"])
+        by_id = {s["标准编号"]: s for s in r2["适用标准集"]}
+        self.assertEqual(by_id["GB 50118-2010"]["激活领域"], ["acoustic", "acoustic(吸声)"])
+        self.assertEqual(by_id["07CJ03-1"]["激活领域"], ["acceptance", "acoustic"])
 
     def _extract_domains(self, reasoning_path: str) -> list[str]:
         start = reasoning_path.find("激活域(") + len("激活域(")
@@ -703,7 +723,8 @@ class TestM6Degradation(unittest.TestCase):
 
 
 class TestIC10SchemaCompliance(unittest.TestCase):
-    """IC-10 Response v1.9.0 Schema 合规（v1.9.0：新增响应字段「外部协同」，CG-20260917-002）。"""
+    """IC-10 Response v1.15.0 Schema 合规（v1.9.0：新增响应字段「外部协同」，CG-20260917-002；
+    v1.15.0：新增可选字段「激活领域」，CG-20261116-006）。"""
 
     def test_required_fields_present(self):
         r = reason("住宅", "分户墙")
@@ -734,14 +755,18 @@ class TestIC10SchemaCompliance(unittest.TestCase):
         """
         contract_enum = _contract_ic10_status_enum()
         role_enum = _contract_ic10_role_enum()
+        domain_enum = _contract_ic10_domain_enum()
         self.assertGreater(len(role_enum), 0, "IC-10 契约 角色 枚举现读为空，降级判据不可用")
+        self.assertGreater(len(domain_enum), 0, "IC-10 契约 激活领域 枚举现读为空，投影判据不可用")
         bad: list[str] = []
         visited: set[tuple[str, str]] = set()
         checked = 0
         for project_type, space_type in sre_reasoner.ACTIVATION_TABLE:
             for location in LOCATIONS:
                 visited.add((project_type, space_type))
-                for s in reason(project_type, space_type, location=location)["适用标准集"]:
+                r = reason(project_type, space_type, location=location)
+                mapping_evs = [ev for ev in r["证据对象"] if ev["证据类型"] == "mapping"]
+                for s in r["适用标准集"]:
                     checked += 1
                     tag = f"{project_type}/{space_type}/{location} {s.get('标准编号')}"
                     for field in ("标准编号", "标准名称", "层级", "权限", "角色",
@@ -758,10 +783,35 @@ class TestIC10SchemaCompliance(unittest.TestCase):
                         bad.append(f"{tag} 时间状态 {s.get('时间状态')!r} 越出 IC-10 契约枚举")
                     if s.get("状态注记") == "":
                         bad.append(f"{tag} 状态注记 为空串，应省略该字段")
+                    # PL-301 ①（CG-20261116-006）：激活领域 在场／升序去重／逐项属契约枚举
+                    domains = s.get("激活领域")
+                    if not isinstance(domains, list) or not domains:
+                        bad.append(f"{tag} 激活领域 缺失或空（矩阵内每枚条目均由某域激活，须在场）")
+                    else:
+                        if domains != sorted(set(domains)):
+                            bad.append(f"{tag} 激活领域 未升序去重 {domains!r}")
+                        for d in domains:
+                            if d not in domain_enum:
+                                bad.append(f"{tag} 激活领域 {d!r} 越出 IC-10 契约枚举")
+                        # 投影 ↔ 证据面双向对撞（独立于实现的解析支：按字面包含反查）
+                        expect = sorted({ev["输入事实"][len("领域="):].split(",", 1)[0]
+                                         for ev in mapping_evs
+                                         if f"'{s['标准编号']}'" in ev["输出结论"]})
+                        if domains != expect:
+                            bad.append(f"{tag} 激活领域 与 mapping 证据反查不等 {domains!r} != {expect!r}")
         self.assertEqual(visited, set(sre_reasoner.ACTIVATION_TABLE), "矩阵遍历漏组")
         self.assertGreater(checked, len(visited) * len(LOCATIONS),
                            "矩阵未产出条目（空跑），字段断言无绑定力")
         self.assertEqual(bad, [], f"IC-10 条目字段越界 {len(bad)} 处：{bad[:6]}")
+        # 未被任何域激活向（控制例）：真实输出每枚条目均由某域激活，省略向只能在投影函数
+        # 单元层构造——合成条目不在任何 mapping 证据族内 ⇒ 省略字段；挂一枚证据后 ⇒ 在场。
+        synth = [{"标准编号": "GB 99999-2099"}]
+        sre_reasoner._project_activation_domains(synth, [])
+        self.assertNotIn("激活领域", synth[0], "未被任何域激活的条目须省略 激活领域")
+        ev = [{"证据类型": "mapping", "输入事实": "领域=fire, 项目类型=住宅",
+               "输出结论": "标准族=['GB 99999-2099']"}]
+        sre_reasoner._project_activation_domains(synth, ev)
+        self.assertEqual(synth[0].get("激活领域"), ["fire"])
 
     def test_decision_trace_when_requested(self):
         r = reason("住宅", "分户墙", return_trace=True)
@@ -1044,6 +1094,29 @@ class TestOfficeLanguageGaps(unittest.TestCase):
         activated, _ = self._domains("办公", "办公地面", None)
         self.assertIn("acoustic(impact)", activated,
                       f"办公地面未激活撞击声域: {sorted(activated)}")
+
+
+class TestHospitalCorridorCeiling(unittest.TestCase):
+    """CG-20261113-006（B 级）：医院走廊吊顶此前无激活表行，稳定退 M6 最小集。
+
+    改前实测＝走廊吊顶 6 条（acceptance+fire）vs 病房吊顶 9 条，差集为 prefab 域三条。
+    撤本行两例同时复红。行名取「走廊吊顶」与同域命名一致；刻意不建「走廊→走廊吊顶」
+    别名——走廊亦可为隔墙场景，建该别名会把走廊隔墙误归吊顶。
+    """
+
+    def test_corridor_ceiling_hits_row_and_activates_prefab(self):
+        activated, _ = sre_reasoner._activate_domains("医院", "走廊吊顶", None, [])
+        self.assertIn("prefab", activated,
+                      f"走廊吊顶未激活 prefab: {sorted(activated)}")
+        unc = reason("医院", "走廊吊顶").get("未覆盖领域", [])
+        self.assertFalse(any("场景未命中" in u for u in unc),
+                         f"走廊吊顶应命中激活表行，却报场景未命中: {unc}")
+
+    def test_corridor_ceiling_standard_set_equals_ward_ceiling(self):
+        corridor = {s["标准编号"] for s in reason("医院", "走廊吊顶")["适用标准集"]}
+        ward = {s["标准编号"] for s in reason("医院", "病房吊顶")["适用标准集"]}
+        self.assertEqual(corridor, ward,
+                         f"两行域集同值故标准集应相等；对称差 {sorted(corridor ^ ward)}")
 
 
 class _SREDeterminismBase(unittest.TestCase):
