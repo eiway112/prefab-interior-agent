@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""交付件渲染器 v2.1：prefab-deliverable/v3 → 形态族单文件 HTML（内容不增不减）。
+"""交付件渲染器 v2.2：prefab-deliverable/v3 → 形态族交付件（HTML 单文件／Word 件，内容不增不减）。
+
+用法（cwd＝本工具所在目录）：
+  python -B deliverable_render.py --check    <case.json>
+  python -B deliverable_render.py --render   <case.json> <out.html|out.docx> [--template X]
+  python -B deliverable_render.py --selftest <case.json>
+  python -B deliverable_render.py --verify   <case.json> <out.html|out.docx>
+
+输出形态由 OUT 后缀决定（.docx＝Word 件，余＝单文件 HTML）；三形态两种输出面都出，
+docx 面用 stdlib zipfile 直写 OOXML（不引第三方依赖）。
 
 三种呈现形态，共用一份数据与同一契约：
   conclusion_sheet  工作面——条件可改，结论随条件重算（默认）
@@ -8,11 +17,6 @@
   brief_card        决策面——只给当前结论、关键缺件、下一步
 
 真实感三件落在数据里而非排版里：签位（编制/复核/接收）、版本与修订、可推翻条件。
-
-用法（cwd＝本工具所在目录）：
-  python -B deliverable_render.py --check  <case.json>
-  python -B deliverable_render.py --render <case.json> <out.html> [--template X]
-  python -B deliverable_render.py --selftest <case.json>
 """
 from __future__ import annotations
 
@@ -20,9 +24,11 @@ import argparse
 import copy
 import hashlib
 import html
+import io
 import json
 import re
 import sys
+import zipfile
 from pathlib import Path
 
 SCHEMA = "prefab-deliverable/v3"
@@ -36,6 +42,7 @@ GRADE_LABEL = {
     "N": "不适用",
 }
 READ_STATUS = ("已读", "部分读取", "未读", "识别失败")
+NUMERALS = "一二三四五六七八九十"           # 章节序号（HTML 面与 docx 面共用）
 D_FORBIDDEN = ("规范要求", "规范规定", "标准要求", "应符合")
 LEDGER_SCHEMA = "citation-ledger/v1"
 STANDARDS_MODES = ("review", "qa")
@@ -829,22 +836,31 @@ def _card_label(state: str) -> str:
     return {"valid": "有效", "stale": "已过期", "missing": "无卡", "declared": "已声明外源"}.get(state, "无卡")
 
 
+STANDARDS_HEADERS = ("标准编号", "引用年号", "引用点", "索引", "证据卡")
+
+
+def standards_rows(st: dict) -> list[list[str]]:
+    """台账逐行的取数单源（HTML 表与 docx 表共用，杜绝第二份手写台账）。"""
+    states = {s["key"]: s for s in st["cards"]["states"]}
+    return [
+        [
+            r["key"],
+            "、".join(str(y) for y in (r.get("cited_years") or [])) or "未注",
+            str(r.get("count") or 0),
+            "索引内" if states.get(r["key"], {}).get("indexed") else "索引外",
+            _card_label(states.get(r["key"], {}).get("state", "missing")),
+        ]
+        for r in st["ledger"]["rows"]
+    ]
+
+
 def standards_table(st: dict) -> str:
     """台账逐行表（编号／年号／引用点／索引／卡）。工作面与评审件共用，杜绝第二份手写台账。"""
     e = html.escape
-    states = {s["key"]: s for s in st["cards"]["states"]}
-    rows = "".join(
-        "<tr>"
-        f'<td>{e(r["key"])}</td>'
-        f'<td>{e("、".join(str(y) for y in (r.get("cited_years") or [])) or "未注")}</td>'
-        f'<td>{e(str(r.get("count") or 0))}</td>'
-        f'<td>{"索引内" if states.get(r["key"], {}).get("indexed") else "索引外"}</td>'
-        f'<td>{e(_card_label(states.get(r["key"], {}).get("state", "missing")))}</td>'
-        "</tr>"
-        for r in st["ledger"]["rows"]
-    )
-    return ("<table><thead><tr><th>标准编号</th><th>引用年号</th><th>引用点</th><th>索引</th><th>证据卡</th>"
-            "</tr></thead><tbody>" + rows + "</tbody></table>")
+    rows = "".join("<tr>" + "".join(f"<td>{e(c)}</td>" for c in row) + "</tr>"
+                   for row in standards_rows(st))
+    return ("<table><thead><tr>" + "".join(f"<th>{e(h)}</th>" for h in STANDARDS_HEADERS)
+            + "</tr></thead><tbody>" + rows + "</tbody></table>")
 
 
 def standards_receipt(st: dict) -> str:
@@ -1182,10 +1198,9 @@ def render_letter(case: dict, digest: str, name: str) -> str:
             f'<p class="note">{e(st["qualification"])}</p>',
             standards_issues(st, levels=("FAIL",), external=True),
         ]))
-    numerals = "一二三四五六七八九十"
     numbered = []
     for i, (title, body) in enumerate(sections):
-        numbered.append(f"<h2>{numerals[i]}、{title}</h2>")
+        numbered.append(f"<h2>{NUMERALS[i]}、{title}</h2>")
         numbered += body
 
     term_block = [f'<p class="note">术语：{e(t)}</p>' for t in case.get("terminology", [])]
@@ -1410,6 +1425,502 @@ def render_review(rep: dict, digest: str, name: str) -> str:
     return "\n".join(parts) + "\n"
 
 
+# ================================ docx 面（OOXML 直写，零第三方依赖）================================
+# 版式单源＝代码内一组 DX_* 常量（不留第二份），取值逐项可指回 `核验成果/` 两份真实对外评审件的复算：
+# 前者＝2026-11-10 发布前专家评审报告件（A4 11906×16838、页边距上 1361／左右 1474／下 1247、
+# 待填底色 FFF2CC、单元格上下 40、表头黑体加粗＋正文宋体）；
+# 后者＝20261104 技术评审意见件（表格四边与内框单线 sz=4、单元格左右 108、正文 21 半磅）。
+# 两份的 pgMar 本就不同（后者上 1361／右 1247／下 1247／左 1361），本批页边距取前者；
+# 西文字体走 Times New Roman。两份件名含客户项目名，故此处只留日期形制指称——随包工具正文出现
+# 该字面即被 `deliverable_acceptance_test.test_tools_carry_no_customer_constants` 判红；
+# 件名全称与逐项复算入口见本批执行记录 §二。
+# 依赖选型＝stdlib：本件是随包工具（`sync_skill_backup.py` 的 TOOL_BUNDLE 把它推到
+# `<技能>/scripts/`），而公开面 README 的「零第三方依赖」字面正对随包面——引第三方库会当场
+# 使该对外承诺不实。判据与否因见本批执行记录。
+DOCX_SUFFIX = ".docx"
+DOCX_FP_MEMBER = "docProps/core.xml"        # docx 侧指纹承载件（zip 内明文 XML，Word 不重排）
+DX_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'
+DX_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+DX_MIME = {
+    "document": "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml",
+    "styles": "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml",
+    "core": "application/vnd.openxmlformats-package.core-properties+xml",
+}
+DX_PAGE_W, DX_MAR_TB, DX_MAR_LR = 11906, (1361, 1247), 1474
+DX_CONTENT_W = DX_PAGE_W - 2 * DX_MAR_LR    # 版心宽（twips），列宽按它分配
+DX_FILL_BLANK = "FFF2CC"                    # 待填格底色
+DX_ZIP_STAMP = (1980, 1, 1, 0, 0, 0)        # 时间戳钉死＝两次渲染逐字节全等的前提
+DX_HINT = ("金色底格为待填项，在 Word 中点击即可键入；其余文字为本件结论，"
+           "件内两处（正文来源行与文档属性）各记一枚来源件指纹，二者与当前来源件不符时判为陈旧件。")
+
+
+def _dx_pstyle(sid: str, ea: str, sz: int, *, bold: bool = False, before: int = 0,
+               after: int = 60, line: int = 276, jc: str | None = None,
+               color: str | None = None, keep_next: bool = False) -> str:
+    ppr = (("<w:keepNext/>" if keep_next else "")
+           + f'<w:spacing w:before="{before}" w:after="{after}" w:line="{line}" w:lineRule="auto"/>'
+           + (f'<w:jc w:val="{jc}"/>' if jc else ""))
+    rpr = (f'<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="{ea}"/>'
+           + ("<w:b/><w:bCs/>" if bold else "")
+           + (f'<w:color w:val="{color}"/>' if color else "")
+           + f'<w:sz w:val="{sz}"/><w:szCs w:val="{sz}"/>')
+    return (f'<w:style w:type="paragraph" w:styleId="{sid}"><w:name w:val="{sid}"/><w:qFormat/>'
+            f"<w:pPr>{ppr}</w:pPr><w:rPr>{rpr}</w:rPr></w:style>")
+
+
+DX_STYLES = DX_XML + (
+    f'<w:styles {DX_NS}>'
+    "<w:docDefaults><w:rPrDefault><w:rPr>"
+    '<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="宋体" w:cs="Times New Roman"/>'
+    '<w:sz w:val="21"/><w:szCs w:val="21"/>'
+    '<w:lang w:val="en-US" w:eastAsia="zh-CN" w:bidi="ar-SA"/>'
+    "</w:rPr></w:rPrDefault>"
+    '<w:pPrDefault><w:pPr><w:spacing w:after="60" w:line="276" w:lineRule="auto"/></w:pPr></w:pPrDefault>'
+    "</w:docDefaults>"
+    + _dx_pstyle("Normal", "宋体", 21)
+    + _dx_pstyle("dxTitle", "黑体", 32, bold=True, before=240, after=120, jc="center")
+    + _dx_pstyle("dxSub", "宋体", 21, after=40, jc="center", color="595959")
+    + _dx_pstyle("dxH", "黑体", 24, bold=True, before=240, after=80, keep_next=True)
+    + _dx_pstyle("dxItem", "黑体", 21, bold=True, after=20, keep_next=True)
+    + _dx_pstyle("dxNote", "宋体", 18, after=40, color="595959")
+    + _dx_pstyle("dxSrc", "宋体", 18, after=40, color="595959")
+    + _dx_pstyle("dxCell", "宋体", 18, after=20, line=240)
+    + _dx_pstyle("dxCellH", "黑体", 18, bold=True, after=20, line=240)
+    + _dx_pstyle("dxGap", "宋体", 8, after=0, line=240)
+    + "</w:styles>"
+)
+DX_TABLE_PR = (
+    "<w:tblPr>"
+    '<w:tblW w:w="0" w:type="auto"/>'
+    "<w:tblBorders>"
+    + "".join(f'<w:{k} w:val="single" w:sz="4" w:space="0" w:color="auto"/>'
+              for k in ("top", "left", "bottom", "right", "insideH", "insideV"))
+    + "</w:tblBorders>"
+    '<w:tblLayout w:type="fixed"/>'        # CT_TblPrBase：tblLayout 须排在 tblCellMar 之前
+    "<w:tblCellMar>"
+    '<w:top w:w="40" w:type="dxa"/><w:left w:w="108" w:type="dxa"/>'
+    '<w:bottom w:w="40" w:type="dxa"/><w:right w:w="108" w:type="dxa"/>'
+    "</w:tblCellMar>"
+    "</w:tblPr>"
+)
+DX_SECTPR = (
+    "<w:sectPr>"
+    f'<w:pgSz w:w="{DX_PAGE_W}" w:h="16838"/>'
+    f'<w:pgMar w:top="{DX_MAR_TB[0]}" w:right="{DX_MAR_LR}" w:bottom="{DX_MAR_TB[1]}" '
+    f'w:left="{DX_MAR_LR}" w:header="720" w:footer="720" w:gutter="0"/>'
+    "</w:sectPr>"
+)
+DX_CONTENT_TYPES = DX_XML + (
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    '<Default Extension="xml" ContentType="application/xml"/>'
+    f'<Override PartName="/word/document.xml" ContentType="{DX_MIME["document"]}"/>'
+    f'<Override PartName="/word/styles.xml" ContentType="{DX_MIME["styles"]}"/>'
+    f'<Override PartName="/{DOCX_FP_MEMBER}" ContentType="{DX_MIME["core"]}"/>'
+    "</Types>"
+)
+DX_ROOT_RELS = DX_XML + (
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+    'relationships/officeDocument" Target="word/document.xml"/>'
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/'
+    'relationships/metadata/core-properties" Target="docProps/core.xml"/>'
+    "</Relationships>"
+)
+DX_DOC_RELS = DX_XML + (
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+    'relationships/styles" Target="styles.xml"/>'
+    "</Relationships>"
+)
+
+
+def _dx_text(s) -> str:
+    return html.escape(str(s), quote=False)
+
+
+def _dx_p(text, style: str = "Normal", ppr: str = "") -> str:
+    run = f'<w:r><w:t xml:space="preserve">{_dx_text(text)}</w:t></w:r>' if text else ""
+    return f'<w:p><w:pPr><w:pStyle w:val="{style}"/>{ppr}</w:pPr>{run}</w:p>'
+
+
+def _dx_tc(val, width: int, style: str) -> str:
+    """val=None 出待填空白格（金色底），str 出文本格。"""
+    shd = "" if val is not None else f'<w:shd w:val="clear" w:color="auto" w:fill="{DX_FILL_BLANK}"/>'
+    return (f'<w:tc><w:tcPr><w:tcW w:w="{width}" w:type="dxa"/>{shd}</w:tcPr>'
+            + _dx_p(val, style) + "</w:tc>")
+
+
+def _dx_widths(ratios, total: int = DX_CONTENT_W) -> list[int]:
+    w = [max(1, int(round(total * float(r) / sum(ratios)))) for r in ratios]
+    w[-1] += total - sum(w)                 # 余数吃在末列，保证列宽和恰等于版心
+    return w
+
+
+def _dx_table(header, rows, ratios, bold_cols=()):
+    return ("table", header, rows, tuple(ratios), tuple(bold_cols))
+
+
+def _dx_kv(pairs) -> tuple:
+    return _dx_table(None, [[k, v] for k, v in pairs], (16, 84), bold_cols=(0,))
+
+
+def _dx_sign(case: dict) -> tuple:
+    issuer = case["meta"]["issuer"]
+
+    def slot(key: str):
+        val = _s(issuer.get(key)).strip()
+        return val or None
+
+    return _dx_table(None, [["编制", slot("prepared_by"), "复核", slot("reviewed_by")],
+                            ["接收", slot("received_by"), "日期", case["meta"]["issued_at"]]],
+                     (12, 38, 12, 38), bold_cols=(0, 2))
+
+
+def _dx_source(case: dict, digest: str, name: str) -> list:
+    rev = case["meta"]["revision"]
+    return [("src", f"来源：{name} ｜ sha256：{digest} ｜ {rev['version']}（{rev['note']}）"),
+            ("note", "本件由装配式装修技能合集生成，供技术参考。标准规范以官方发布的现行有效版本为准；"
+                     "具体设计、施工及验收由项目设计单位与具备资质的专业人员负责。")]
+
+
+def _dx_standards(case: dict, external: bool) -> list:
+    """标准引用核验块（docx 面）。取数与 HTML 面同源：回执＝standards_receipt、
+    台账＝standards_rows、判词＝verification.results；本函数不含任何手写计数。"""
+    st = case.get("standards")
+    if not st:
+        return []
+    levels = ("FAIL",) if external else ("FAIL", "WARN")
+    msgs = [f"[{lv}] {_ext_msg(msg) if external else msg}"
+            for lv, msg in st["verification"]["results"] if lv in levels]
+    return [("h", "标准引用核验" if external else "标准引用核验（台账随件）"),
+            ("p", f"出口闸回执：{standards_receipt(st)}"),
+            ("note", st["qualification"]),
+            _dx_table(list(STANDARDS_HEADERS), [list(r) for r in standards_rows(st)],
+                      (34, 16, 12, 14, 20)),
+            ("note", "未核＝身份未核（索引外）或版本未核（引用未注年号）的台账行枚数；"
+                     "计数由台账与判定明细现算，不是手写值。证据卡只补证据信息，不改判定。"),
+            ("bullets", msgs or (["无红项。"] if levels == ("FAIL",) else ["无红黄项。"]))]
+
+
+def _dx_body(blocks) -> str:
+    out = []
+    for blk in blocks:
+        kind = blk[0]
+        if kind == "table":
+            _, header, rows, ratios, bold = blk
+            widths = _dx_widths(ratios)
+            if any(len(r) != len(widths) for r in rows) or (header and len(header) != len(widths)):
+                raise ValueError("docx 表格列数与列宽不配")
+            grid = "".join(f'<w:gridCol w:w="{w}"/>' for w in widths)
+            trs = ""
+            if header:
+                trs += ('<w:tr><w:trPr><w:tblHeader/></w:trPr>'
+                        + "".join(_dx_tc(h, w, "dxCellH") for h, w in zip(header, widths))
+                        + "</w:tr>")
+            for row in rows:
+                trs += ("<w:tr>" + "".join(
+                    _dx_tc(v, w, "dxCellH" if i in bold and v is not None else "dxCell")
+                    for i, (v, w) in enumerate(zip(row, widths))) + "</w:tr>")
+            out.append(f'<w:tbl>{DX_TABLE_PR}<w:tblGrid>{grid}</w:tblGrid>{trs}</w:tbl>'
+                       + _dx_p(None, "dxGap"))
+        elif kind == "bullets":
+            for it in blk[1]:
+                out.append(_dx_p(f"— {it}", "Normal",
+                                 '<w:ind w:left="340" w:hanging="340"/>'))
+        elif kind == "title":
+            out.append(_dx_p(blk[1], "dxTitle"))
+        elif kind == "sub":
+            out.append(_dx_p(blk[1], "dxSub"))
+        elif kind == "h":
+            out.append(_dx_p(blk[1], "dxH"))
+        elif kind == "item":
+            out.append(_dx_p(blk[1], "dxItem"))
+        elif kind in ("note", "src"):
+            out.append(_dx_p(blk[1], "dxNote" if kind == "note" else "dxSrc"))
+        elif kind == "p":
+            out.append(_dx_p(blk[1]))
+        else:
+            raise ValueError(f"未知 docx 块类型：{kind}")
+    return "".join(out)
+
+
+def _dx_letter_blocks(case: dict, digest: str, name: str) -> list:
+    """对外答复函 → Word 件：散文段沿用 HTML 面的措辞，需贵方回复与下一步改为可填表。"""
+    meta, scop = case["meta"], case["scope"]
+    rev = meta["revision"]
+    state = _default_state(case)
+    to = _s(meta["issuer"].get("received_by")).strip()
+    b: list = [("title", meta["title"]),
+               ("sub", f'{meta["project"]} ｜ {meta["stage"]} ｜ {rev["version"]} ｜ {meta["issued_at"]}'),
+               ("p", f"致：{to}" if to else "致：（接收方待填，见文末签署表）"),
+               ("note", DX_HINT)]
+
+    items: list = []
+    for c in case["conclusions"]:
+        if not _applicable(c, state):
+            continue
+        doubt = c.get("doubt") or {}
+        tail = ""
+        if c.get("review_status") == "存疑":
+            scope = _s(doubt.get("scope")).strip() or "整条"
+            where = "本条整体尚未确认" if scope == "整条" else f"其中{scope}尚待核实"
+            tail = f"（{where}，不作为本件结论；定案条件：{doubt.get('resolve', '')}）"
+        items.append(("item", c["item"] + ("（依据待核）" if c["grade"] == "D" else "")))
+        items.append(("p", _ext(c["conclusion"]) + _ext(tail)))
+        items.append(("src", f'适用条件：{_ext(c["conditions"])} ｜ 依据：'
+                             f'{_ext(c["source"]["doc"])} {_ext(c["source"]["clause"])}'))
+    if not items:
+        items = [("p", "当前条件下没有可答复的结论。")]
+
+    fixes: list = []
+    for w in case.get("withdrawn", []):
+        fixes.append(("note", f'原答复：「{_ext(w["conclusion"])}」'))
+        fixes.append(("p", f"本件不予采用。{_ext(w['reason'])}"))
+
+    item_of = {c["id"]: c["item"] for c in case["conclusions"]}
+    asks = [g for g in case["gaps"] if g.get("external") and g.get("kind", "ask") == "ask"]
+    assumed = [g for g in case["gaps"] if g.get("external") and g.get("kind") == "assume"]
+    ask_rows = [[_ext(g["what"]), _ext(g["why"]), g["owner"],
+                 "、".join(item_of.get(a, a) for a in g["affects"]), None] for g in asks]
+    ask_block: list = ([_dx_table(["事项", "为什么要", "提供方", "影响哪条", "贵方回复"],
+                                  ask_rows, (20, 24, 10, 18, 28))]
+                       if asks else [("p", "无需贵方另行提供事项。")])
+    if assumed:
+        ask_block.append(("p", "下列事项不影响本件结论，本件已按默认推进，请在标注节点验证；"
+                               "如与贵方要求不符，请回函更正。"))
+        ask_block.append(("bullets", [f'{_ext(g["what"])}——按默认推进：{_ext(g.get("default", ""))}'
+                                      f'；验证节点：{_ext(g.get("verify_at", ""))}' for g in assumed]))
+
+    step_rows = [[s["action"], s["owner"], s["trigger"], None] for s in case["next_steps"]]
+
+    sections = [("结论与依据", items)]
+    if fixes:
+        sections.append(("已更正的表述",
+                         [("p", "原答复中的下列表述经复核不成立，本件不予采用，特此更正。"), *fixes]))
+    sections += [
+        ("需贵方提供或确认的事项", ask_block),
+        ("下一步", [_dx_table(["动作", "责任方", "触发时点", "完成情况"], step_rows, (40, 16, 20, 24))]),
+        ("本答复的边界", [("p", "；".join(_ext(x).rstrip("。") for x in scop["cannot_judge"]) + "。")]),
+        ("答复失效条件", [("bullets", [_ext(x) for x in case["overturn"]])]),
+    ]
+    sections += [("标准引用核验", _dx_standards(case, external=True))] if case.get("standards") else []
+
+    cond_text = _condition_line(case, state)
+    cond_sentence = (f"本答复基于下列已锁定条件：{cond_text}；条件变化时结论需重新判定。"
+                     if cond_text else
+                     "本答复未绑定可变条件；若项目条件与本答复所述不一致，结论需重新判定。")
+    b.append(("p", f"根据贵方提供的项目条件，就本项目{meta['stage']}事项，现将结论与依据答复如下。{cond_sentence}"))
+    b += [("note", f"术语：{t}") for t in case.get("terminology", [])]
+    for i, (title, body) in enumerate(sections):
+        b.append(("h", f"{NUMERALS[i]}、{title}"))
+        b += body
+    b.append(("h", "签署"))
+    b.append(_dx_sign(case))
+    b += _dx_source(case, digest, name)
+    return b
+
+
+def _dx_sheet_blocks(case: dict, digest: str, name: str) -> list:
+    """工作面 → Word 件：HTML 面的下拉与重算在 Word 里不存在，本面出默认条件快照＋可改取值列。"""
+    if not case["conditions"]:
+        raise ValueError("工作面需要至少一个可改条件；无变量答复请用 reply_letter 或 brief_card")
+    meta, scop = case["meta"], case["scope"]
+    rev = meta["revision"]
+    state = _default_state(case)
+    shown = [c for c in case["conclusions"] if _applicable(c, state)]
+    b: list = [("title", meta["title"]),
+               ("sub", f'工作面 · 默认条件快照 ｜ {meta["project"]} ｜ {rev["version"]} ｜ {meta["issued_at"]}'),
+               ("note", DX_HINT),
+               ("p", f"本件不判：{'；'.join(scop['cannot_judge'][:3])}")]
+
+    b.append(("h", "条件"))
+    b.append(_dx_table(["条件", "当前取值", "可选项", "贵方确认取值"],
+                       [[c["label"],
+                         next((o["label"] for o in c["options"] if o["value"] == state.get(c["id"])), ""),
+                         "／".join(o["label"] for o in c["options"]), None]
+                        for c in case["conditions"]], (20, 20, 36, 24)))
+
+    b.append(("h", "当前结论"))
+    pairs = _headline_pairs(case, state)
+    b.append(_dx_table(["结论项", "结论", "档位"],
+                       [[h["item"], h["conclusion"], f'{h["grade"]} {GRADE_LABEL[h["grade"]]}']
+                        for _, h in pairs] or [["—", "当前条件组合下没有可判结论——请补充条件或转人工复核。", "—"]],
+                       (22, 64, 14)))
+
+    b.append(("h", f"结论与依据（{len(shown)} 条适用）"))
+    rows = []
+    for i, c in enumerate(shown, 1):
+        note = ""
+        if isinstance(c.get("doubt"), dict):
+            note = f'\n存疑范围：{c["doubt"]["scope"]}｜定案条件：{c["doubt"]["resolve"]}'
+        if _s(c.get("note")).strip():
+            note += f'\n{c["note"]}'
+        rows.append([str(i), c["item"] + ("〔存疑〕" if c.get("review_status") == "存疑" else ""),
+                     f'适用条件：{c["conditions"]}{note}',
+                     f'{c["grade"]} {GRADE_LABEL[c["grade"]]}',
+                     f'{c["source"]["doc"]} {c["source"]["clause"]}'])
+    b.append(_dx_table(["#", "结论项", "结论与适用条件", "档位", "依据"], rows, (5, 20, 40, 10, 25)))
+    b.append(("note", "档位：A 规范明文（可核到条款）· B 可溯源报告 · C 行业通用做法或设计取值 · "
+                      "D 待核（不得作规范要求）· N 不适用。档位口径单源＝各技能正文；本件只转写，不改判。"))
+    if case.get("terminology"):
+        b.append(("note", f"术语提示：{'；'.join(case['terminology'])}"))
+    if case.get("warnings"):
+        for w in case["warnings"]:
+            if _applicable(w, state):
+                b.append(("p", f"条件冲突：{w['text']}"))
+    if case.get("withdrawn"):
+        b.append(("h", "已剔除的答复条目（不构成本件结论）"))
+        b.append(_dx_table(["原编号", "结论项", "原答复表述", "剔除理由"],
+                           [[w["id"], w["item"], w["conclusion"], w["reason"]]
+                            for w in case["withdrawn"]], (10, 22, 40, 28)))
+
+    b.append(("h", "缺什么、谁给、影响哪条"))
+
+    def gap_row(g: dict) -> str:
+        if g.get("kind", "ask") == "assume":
+            return f"按默认推进：{g.get('default', '')}（验证节点：{g.get('verify_at', '')}）"
+        return f"须贵方提供（影响：{'、'.join(g['affects'])}）"
+
+    b.append(_dx_table(["已补", "缺什么", "为什么要", "谁提供", "处理方式／影响哪条"],
+                       [[None, g["what"], g["why"], g["owner"], gap_row(g)] for g in case["gaps"]],
+                       (7, 25, 24, 12, 32)))
+    b.append(("h", "下一步"))
+    b.append(_dx_table(["#", "动作", "责任方", "触发时点", "完成情况"],
+                       [[str(i), s["action"], s["owner"], s["trigger"], None]
+                        for i, s in enumerate(case["next_steps"], 1)], (5, 34, 14, 19, 28)))
+    b.append(("h", "什么情况下本件结论会改变"))
+    b.append(("bullets", list(case["overturn"])))
+    b.append(("h", "本件边界（能判／不能判）与输入溯源"))
+    b.append(("p", "能判："))
+    b.append(("bullets", list(scop["can_judge"])))
+    b.append(("p", "不能判："))
+    b.append(("bullets", list(scop["cannot_judge"])))
+    b.append(("p", "输入与读取状态："))
+    b.append(_dx_table(["输入", "读取状态", "说明"],
+                       [[it["name"], it["status"], _s(it.get("note") or "")] for it in meta["inputs"]],
+                       (44, 14, 42)))
+    b += _dx_standards(case, external=False)
+    b.append(("h", "签署"))
+    b.append(_dx_sign(case))
+    b += _dx_source(case, digest, name)
+    return b
+
+
+def _dx_brief_blocks(case: dict, digest: str, name: str) -> list:
+    """决策面 → Word 件：只给当前结论、关键缺件、下一步（与 HTML 面同取舍，判词不上面）。"""
+    meta = case["meta"]
+    state = _default_state(case)
+    pairs = _headline_pairs(case, state)
+    rows = [[h["item"], h["conclusion"]] for _, h in pairs] or \
+           [[c["item"], c["conclusion"]] for c in case["conclusions"][:4]]
+    doubt_n = sum(1 for c in case["conclusions"] if c.get("review_status") == "存疑")
+    b: list = [("title", meta["title"]),
+               ("sub", f'决策速览 · 只给结论、缺口与动作 ｜ {meta["project"]} ｜ {meta["stage"]}'),
+               ("note", DX_HINT),
+               _dx_table(["结论项", "当前结论"], rows, (26, 74))]
+    if not rows:
+        b.append(("p", "当前条件下没有可判结论。"))
+    b.append(("h", "必须先补齐"))
+    b.append(("bullets", [f'{g["what"]}（{g["owner"]}）' for g in case["gaps"] if g.get("external")]
+              or ["无外部缺件。"]))
+    b.append(("h", "下一步"))
+    b.append(("bullets", [f'{s["action"]}（{s["owner"]}，{s["trigger"]}）' for s in case["next_steps"]]
+              or ["无。"]))
+    if doubt_n:
+        b.append(("note", f"尚待核实：{doubt_n} 条结论未定案，签署前须回工作面件看定案条件。"))
+    if case.get("standards"):
+        st = case["standards"]
+        b.append(("note", f"出口闸回执：{standards_receipt(st)}"))
+        b.append(("note", st["qualification"]))
+    b.append(("h", "签署"))
+    b.append(_dx_sign(case))
+    b += _dx_source(case, digest, name)
+    return b
+
+
+def _dx_package(body: str, title: str, digest: str) -> bytes:
+    parts = [
+        ("[Content_Types].xml", DX_CONTENT_TYPES),
+        ("_rels/.rels", DX_ROOT_RELS),
+        ("word/document.xml", DX_XML + f'<w:document {DX_NS}><w:body>{body}{DX_SECTPR}</w:body></w:document>'),
+        ("word/_rels/document.xml.rels", DX_DOC_RELS),
+        ("word/styles.xml", DX_STYLES),
+        (DOCX_FP_MEMBER, DX_XML
+         + '<cp:coreProperties '
+           'xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
+           'xmlns:dc="http://purl.org/dc/elements/1.1/">'
+           + f"<dc:title>{_dx_text(title)}</dc:title>"
+             f"<dc:identifier>来源件指纹 sha256：{_dx_text(digest)}</dc:identifier>"
+           + "</cp:coreProperties>"),
+    ]
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for member, xml in parts:
+            info = zipfile.ZipInfo(member, date_time=DX_ZIP_STAMP)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o600 << 16
+            z.writestr(info, xml.encode("utf-8"))
+    return buf.getvalue()
+
+
+def render_docx(case: dict, digest: str, name: str, template: str | None = None) -> bytes:
+    """prefab-deliverable/v3 → Word 件（人工可填、零第三方依赖）。三形态与 HTML 面同数据同契约。"""
+    tpl = template or case["meta"].get("default_template") or "conclusion_sheet"
+    if tpl == "reply_letter":
+        blocks = _dx_letter_blocks(case, digest, name)
+    elif tpl == "brief_card":
+        blocks = _dx_brief_blocks(case, digest, name)
+    else:
+        blocks = _dx_sheet_blocks(case, digest, name)
+    return _dx_package(_dx_body(blocks), case["meta"]["title"], digest)
+
+
+def docx_member(pkg: bytes, member: str) -> str:
+    """取 docx 包内某件的明文（自检与门禁的 docx 侧取数入口）。"""
+    with zipfile.ZipFile(io.BytesIO(pkg)) as z:
+        return z.read(member).decode("utf-8")
+
+
+def docx_fingerprint_text(pkg: bytes) -> str:
+    """从 docx 字节里取承载指纹的那件明文（Word 保存不重排 docProps/core.xml）。"""
+    return docx_member(pkg, DOCX_FP_MEMBER)
+
+
+def _dx_join_text(xml_frag: str) -> str:
+    """从一段 OOXML 里取文字层。定界须排除 `<w:tbl>`／`<w:tc>` 等同前缀元素：
+    只认裸 `<w:t>` 与带属性的 `<w:t xml:space=...>`。"""
+    return html.unescape("".join(re.findall(r"<w:t(?:\s[^>]*)?>(.*?)</w:t>", xml_frag, re.S)))
+
+
+def docx_text(pkg: bytes) -> str:
+    """docx 正文文字层（逐 `<w:t>` 拼接后反转义）＝内容取数面，不含标记、也不含命名空间串。"""
+    return _dx_join_text(docx_member(pkg, "word/document.xml"))
+
+
+def docx_paragraphs(pkg: bytes) -> list:
+    """逐段取（样式, 文字）。文字层判据需按段落过滤时用，形制与 HTML 面的 `.sub` 剥离同口径。"""
+    doc = docx_member(pkg, "word/document.xml")
+    out = []
+    for para in re.findall(r"<w:p>.*?</w:p>", doc, re.S):
+        m = re.search(r'<w:pStyle w:val="([^"]+)"/>', para)
+        out.append((m.group(1) if m else "Normal", _dx_join_text(para)))
+    return out
+
+
+def docx_tables(pkg: bytes) -> list:
+    """逐表取行、逐行取格的文字层＝docx 侧「逐格对撞」的取数入口（与 HTML 表同口径）。"""
+    doc = docx_member(pkg, "word/document.xml")
+    tables = []
+    for tbl in re.findall(r"<w:tbl>.*?</w:tbl>", doc, re.S):
+        rows = []
+        for tr in re.findall(r"<w:tr>.*?</w:tr>", tbl, re.S):
+            rows.append([_dx_join_text(tc)
+                         for tc in re.findall(r"<w:tc>.*?</w:tc>", tr, re.S)])
+        tables.append(rows)
+    return tables
+
+
 def render(case: dict, digest: str, name: str, template: str | None = None) -> str:
     tpl = template or case["meta"].get("default_template") or "conclusion_sheet"
     if tpl == "reply_letter":
@@ -1436,16 +1947,46 @@ def digest_matches(html_text: str, digest: str) -> bool:
     return bool(got) and got == digest
 
 
+def is_docx(out_path: Path) -> bool:
+    """输出面判定：后缀 .docx 走 Word 件，其余走单文件 HTML（CLI 与 verify 同判据）。"""
+    return out_path.suffix.lower() == DOCX_SUFFIX
+
+
+def _fingerprint_texts(out_path: Path) -> dict:
+    """件内指纹读数，按面逐枚取。
+
+    docx 有两枚须同指一源＝`docProps/core.xml` 的承载位（Word 重排不到它）＋正文来源行
+    （客户看得见的那枚）。只钉承载位时，人工把正文来源行改成另一枚件的值也不判红，
+    而客户对外的凭据恰恰是看得见的那枚——HTML 面全文即文本，取一枚。
+    """
+    if is_docx(out_path):
+        pkg = out_path.read_bytes()
+        return {"文档属性": docx_fingerprint_text(pkg), "正文来源行": docx_member(pkg, "word/document.xml")}
+    return {"件内": out_path.read_text(encoding="utf-8")}
+
+
 def verify(case_path: Path, out_path: Path) -> int:
-    """陈旧件拒绝：件内指纹须等于当前 JSON 指纹，否则判为过期件。"""
+    """陈旧件拒绝：件内指纹须等于当前 JSON 指纹，否则判为过期件。HTML 与 docx 两条面同判据。"""
     digest = hashlib.sha256(case_path.read_bytes()).hexdigest()
-    text = out_path.read_text(encoding="utf-8")
-    got = _extract_digest(text)
-    if not got:
-        print(f"未在件中找到来源指纹：{out_path}", file=sys.stderr)
+    try:
+        faces = _fingerprint_texts(out_path)
+    except (OSError, KeyError, ValueError, zipfile.BadZipFile, UnicodeDecodeError) as exc:
+        print(f"未在件中找到来源指纹：{out_path}（{type(exc).__name__}：{exc}）", file=sys.stderr)
         return 1
-    if got != digest:
-        print(f"陈旧件：{out_path.name} 件内指纹 {got[:16]}… ≠ 当前 JSON {digest[:16]}…，须重新渲染", file=sys.stderr)
+    got = {}
+    for face, text in faces.items():
+        val = _extract_digest(text)
+        if not val:
+            print(f"未在件中找到来源指纹：{out_path}（缺「{face}」枚）", file=sys.stderr)
+            return 1
+        got[face] = val
+    if len(set(got.values())) > 1:
+        detail = " ｜ ".join(f"{face} {val[:16]}…" for face, val in got.items())
+        print(f"件内指纹自相矛盾：{out_path.name} 各枚不同指一源（{detail}），须重新渲染", file=sys.stderr)
+        return 1
+    if digest not in set(got.values()):
+        detail = " ｜ ".join(f"{face} {val[:16]}…" for face, val in got.items())
+        print(f"陈旧件：{out_path.name} 件内指纹 {detail} ≠ 当前 JSON {digest[:16]}…，须重新渲染", file=sys.stderr)
         return 1
     print(f"一致：{out_path.name} 对应当前 JSON（{digest[:16]}…）")
     return 0
@@ -1475,6 +2016,24 @@ def _selftest(case_path: Path) -> int:
         check(f"{tpl} 渲染确定性（两次一致）", outs[tpl] == render(case, digest, case_path.name, tpl))
         check(f"{tpl} 无外部资源引用", "http://" not in outs[tpl] and "https://" not in outs[tpl])
         check(f"{tpl} 含签署与溯源", ("sign" in outs[tpl] or ("编制" in outs[tpl] and "复核" in outs[tpl])) and "sha256" in outs[tpl])
+        try:
+            pkg = render_docx(case, digest, case_path.name, tpl)
+        except Exception as exc:  # noqa: BLE001
+            check(f"{tpl} docx 渲染无异常", False, repr(exc))
+            continue
+        doc = docx_member(pkg, "word/document.xml")
+        text = docx_text(pkg)
+        fp = docx_fingerprint_text(pkg)
+        check(f"{tpl} docx 渲染确定性（两次逐字节一致）",
+              pkg == render_docx(case, digest, case_path.name, tpl))
+        check(f"{tpl} docx 两处指纹（文档属性＋正文来源行）同指当前源件",
+              digest_matches(fp, digest) and _extract_digest(doc) == digest)
+        check(f"{tpl} docx 负向注入：承载枚不符判为陈旧件", not digest_matches(fp.replace(digest, "0" * 64), digest))
+        check(f"{tpl} docx 负向注入：可见枚单指他件时两枚不成一致",
+              not (digest_matches(fp, digest) and _extract_digest(doc.replace(digest, "0" * 64)) == digest))
+        check(f"{tpl} docx 无外部资源引用", "http://" not in text and "https://" not in text)
+        check(f"{tpl} docx 含签署与溯源", "编制" in text and "复核" in text and "sha256" in text)
+        check(f"{tpl} docx 可填空：待填格带底色", f'w:fill="{DX_FILL_BLANK}"' in doc)
 
     sheet = outs.get("conclusion_sheet", "")
     if sheet:
@@ -1627,8 +2186,13 @@ def main(argv: list[str]) -> int:
         print(f"契约校验通过：{target} ｜ 形态 {case['meta'].get('default_template', 'conclusion_sheet')}")
         return 0
     out = Path(args.render[1])
-    out.write_bytes(render(case, hashlib.sha256(raw).hexdigest(), target.name, args.template).encode("utf-8"))
-    print(f"已渲染：{out}（形态 {args.template or case['meta'].get('default_template', 'conclusion_sheet')}）")
+    digest = hashlib.sha256(raw).hexdigest()
+    face = "docx" if is_docx(out) else "html"
+    payload = (render_docx(case, digest, target.name, args.template) if face == "docx"
+               else render(case, digest, target.name, args.template).encode("utf-8"))
+    out.write_bytes(payload)
+    print(f"已渲染：{out}（形态 {args.template or case['meta'].get('default_template', 'conclusion_sheet')}"
+          f" ｜ 输出面 {face} ｜ {len(payload)} B）")
     return 0
 
 
