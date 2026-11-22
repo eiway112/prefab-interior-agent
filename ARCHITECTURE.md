@@ -1,6 +1,6 @@
 # 代码架构
 
-本仓是**技能分发面**：没有服务端、没有构建步骤、没有第三方依赖。运行的“代码”分两类：被宿主加载的 `SKILL.md` 指令，以及随包的少量 Python 引擎与工具。本文说明它们的边界、数据流与扩展点。
+本仓是**技能分发面**：没有服务端、没有构建步骤；技能文本和 ACE 无第三方依赖，Markdown 引用核验工具依赖 `markdown-it-py`，安装方式见 README「运行环境」。运行的“代码”分两类：被宿主加载的 `SKILL.md` 指令，以及随包的少量 Python 引擎与工具。本文说明它们的边界、数据流与扩展点。
 
 ## 1. 两层形态
 
@@ -41,10 +41,11 @@ flowchart LR
 | `skills/prefab-standards-reviewer/sre_reasoner.py` | 1,297 行 | 标准复核推理与引用分级 | `sre_regression_test.py` 91 例随包 |
 | `skills/prefab-standards-reviewer/sre_regression_test.py` | 2,253 行 | SRE 回归 | 自测 |
 | `skills/prefab-standards-reviewer/sr_ic07_compliance_test.py` | 175 行 | IC-07 合规回归 | 自测 |
+| `skills/prefab-standards-reviewer/scripts/` | 以源码现读为准 | 引用台账与核验、按需取真、交付件渲染与出口闸、答疑入口 | 回归套件在开发仓，未随包 |
 | `tools/install.py` | 以源码现读为准 | 受管更新、内容核对、备份与恢复 | 开发仓 `public_install_test.py`；CI 安装复检 |
 | `tools/smoke_test.py` | 以源码现读为准 | 包结构、引用与安装内容逐字节核对 | CI 直接运行 |
 
-全部只用 Python 标准库。技能正文是 Markdown＋YAML frontmatter，不需要编译。
+技能正文是 Markdown＋YAML frontmatter，不需要编译。ACE 内核、安装与自检脚本只用 Python 标准库；随包的 Markdown 引用核验需 `markdown-it-py`（安装方式见 README「运行环境」），缺该依赖时工具拒绝核验并提示安装，不按零引用放行。
 
 ## 4. 一次请求的数据流
 
@@ -59,7 +60,7 @@ flowchart LR
 | 层 | 内容 | 是否随包 |
 |---|---|---|
 | 公开 CI | 包结构自检、安装复检、SRE 91 例、IC-07 20 例；Ubuntu／Windows × Python 3.10／3.12 | 是（`.github/workflows/smoke.yml`） |
-| 开发仓门禁 | 台账一致性、数据分类、冻结基准、跨层字节一致、表结构等 22 道 | 否 |
+| 开发仓门禁 | 台账一致性、数据分类、冻结基准、跨层字节一致、表结构等 28 道（口径＝开发仓 `AGENTS.md` 验收门禁表行数） | 否 |
 
 **边界**：公开面通过只证明结构一致与随包测试通过，**不证明内容正确**；数值与条文的正确性以核验记录与检测报告为准。
 

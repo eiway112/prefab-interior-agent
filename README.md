@@ -3,7 +3,7 @@
   <h1>装配式装修智能体技能合集</h1>
   <p>把一个垂直领域的专家判据，做成智能体可加载、可审计、可复用的知识资产</p>
   <p>
-    <img src="https://img.shields.io/badge/version-v1.9.0-orange" alt="version">
+    <img src="https://img.shields.io/badge/version-v1.10.0-orange" alt="version">
     <img src="https://img.shields.io/badge/skills-15-blue" alt="skills">
     <img src="https://img.shields.io/badge/python-3.10%2B-yellow" alt="python">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="license">
@@ -71,7 +71,7 @@ python tools/install.py                              # 装到 ~/.qoder/skills，
 python tools/smoke_test.py --target ~/.qoder/skills  # 自检：15 技能 + 8 份治理文件
 ```
 
-重启智能体宿主，直接提问。第一句建议问「酒店客房整体卫浴，SMC、彩钢板、瓷砖饰面三条路线怎么选？」——这条能拿到完整的选型对比与条文级依据；想看它怎么处理隔声类问题，先读 [`examples/01`](examples/01-partition-wall-verification.md)。需要 Python 3.10+，**零第三方依赖**。
+重启智能体宿主，直接提问。第一句建议问「酒店客房整体卫浴，SMC、彩钢板、瓷砖饰面三条路线怎么选？」——这条能拿到完整的选型对比与条文级依据；想看它怎么处理隔声类问题，先读 [`examples/01`](examples/01-partition-wall-verification.md)。需要 Python 3.10+；引用核验工具另需安装 `markdown-it-py==4.0.0`（见运行环境）。
 
 不想装？[`examples/`](examples/) 放了四份技能**真实应答样例**，由开发仓从各技能自己的示例件**原样抽取**，不改写、不补数值：
 
@@ -96,7 +96,7 @@ python tools/smoke_test.py --target ~/.qoder/skills  # 自检：15 技能 + 8 �
 | 随包文件 | 106 个 | [公开面边界](#公开面边界随包--不随包) |
 | 可跑测试 | 111 例，纯标准库，装完即可复跑 | [质量与测试](#质量与测试) |
 | CI | Ubuntu／Windows × Python 3.10／3.12，每次 push 实跑 | `.github/workflows/smoke.yml` |
-| 运行依赖 | 0（技能正文是 Markdown，引擎只用标准库） | [运行环境](#运行环境) |
+| 运行依赖 | 技能文本与 ACE 无第三方依赖；Markdown 引用核验需 markdown-it-py | [运行环境](#运行环境) |
 | 未核项 | 公开，不藏缺口 | [`verification/`](verification/) |
 | 许可 | MIT，引用请保留版权声明 | [引用与署名](#引用与署名) |
 
@@ -388,11 +388,11 @@ prefab-interior-agent/
 
 ## 运行环境
 
-技能为纯文本资产，直接复制即可用，无运行依赖。ACE 可执行内核 `ace_kernel.py` 仅用 Python 3.8+ 标准库，唯一入口 `compute_request(ic_id, request)`，参数不足或超范围一律以降级结构返回而非抛错。开发仓的维护脚本另需 Python 3.10+，这些脚本不随包。
+技能正文为纯文本资产；ACE 内核 `ace_kernel.py` 仅用 Python 标准库。随包的标准引用核验及交付出口工具需 Python 3.10+，其中 Markdown 解析使用 `markdown-it-py`；HTML/DOCX 正文解析使用标准库。使用引用核验前执行 `python -m pip install markdown-it-py==4.0.0 mdurl==0.1.2`。缺少 Markdown 解析依赖时工具拒绝核验并提示安装，不会按零引用放行。DOCX 页眉、页脚、脚注以及 HTML 动态脚本和 CSS 布局不在正文抽取范围。开发仓维护脚本不随包。
 
 ## 版本与迭代策略
 
-- 本仓按语义化版本打标签发布（当前 `v1.9.0`）；引用请**锁定到 tag 或具体 commit**（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。
+- 本仓按语义化版本打标签发布（当前 `v1.10.0`）；引用请**锁定到 tag 或具体 commit**（`git describe --tags` 可读最近标签），避免跟随 main 拿到中间状态。
 - 公开面变更见 [CHANGELOG.md](CHANGELOG.md)；各技能的具体版本以 `SKILL.md` frontmatter 的 `version` 字段为准。
 - 规范标准修订、技能内容勘误以 PATCH/MINOR 发布；架构或契约级调整以 MAJOR 发布。
 - **反馈与纠错**：欢迎开 Issue（使用问题、数据纠错、标准失效线索均可）。数据纠错类 Issue 承诺 **3 个工作日内**响应——这类 Issue 是本仓最有价值的外部输入，因为标准会修订、本仓会漏。安全类问题请走 [SECURITY.md](SECURITY.md) 的私密通道；协作方式见 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。

@@ -4,7 +4,8 @@
 
 硬约束（不编造）：
   1. 只收「带出处」的断言：标准编号或显式「行业通用做法/默认推荐」；
-  2. 带条款号 → A；仅标准编号、无条款 → D；通用做法 → C；三者皆无 → 不收录（列进待审）；
+  2. 带条款号 → D（条款候选：条号答复自报、原文与页锚未取证）；仅标准编号、无条款 → D；
+     通用做法 → C；三者皆无 → 不收录（列进待审）；A 档不自动产生，仅经人工复核取证进入；
   3. 每条结论/缺件带 _source_line，可回查原文行；
   4. 不推断项目条件；无变量答复默认出对外件，不出工作面。
 
@@ -28,6 +29,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from deliverable_render import GATE_VERDICTS  # noqa: E402
 from deliverable_render import GRADES  # noqa: E402
 from deliverable_render import render as render_case  # noqa: E402
 from deliverable_render import validate as validate_case  # noqa: E402
@@ -151,8 +153,11 @@ def parse(text: str) -> tuple[dict, list[str]]:
         standards = STANDARD_RE.findall(value)
         has_clause = bool(CLAUSE_RE.search(value))
         if standards and has_clause:
-            grade, doc, clause = "A", "；".join(standards), (CLAUSE_RE.search(value).group(0) if CLAUSE_RE.search(value) else "")
-            note = "自动定档：条款承载已取证（条款号＋逐字＋页锚），待人工确认。"
+            # F02（CG-20261117-003）：语法提取只是引用候选——条号来自答复自报，
+            # 条文原文、载体身份与页锚均未取证，不得自动升 A；A 档仅经人工复核取证进入。
+            grade, doc = "D", "；".join(standards)
+            clause = CLAUSE_RE.search(value).group(0) + "（答复自报，原文与页锚未取证）"
+            note = "自动定档：条款号取自答复自报，条文原文与页锚未取证，条款核前不得作规范引用，待人工确认。"
         elif standards:
             grade, doc, clause = "D", "；".join(standards), "条款未核（答复仅给标准编号）"
             note = "自动定档：仅有标准编号、未给条款，条款核前不得作规范引用。"
@@ -192,7 +197,7 @@ def parse(text: str) -> tuple[dict, list[str]]:
         review.append("未提取到任何带出处的结论——该答复可能全部为无条件断言")
     d_count = sum(1 for c in conclusions if c["grade"] == "D")
     if d_count:
-        review.append(f"D 档 {d_count} 条：仅标准编号、条款未核，须人工确认")
+        review.append(f"D 档 {d_count} 条：条款未取证（仅标准编号或条号答复自报），须人工确认")
     c_count = sum(1 for c in conclusions if c["grade"] == "C")
     if c_count:
         review.append(f"C 档 {c_count} 条：自动定档（行业通用做法／设计取值），须人工确认")
@@ -470,7 +475,25 @@ def _selftest() -> int:
 
     grades = [c["grade"] for c in case["conclusions"]]
     check("五条断言入结论", len(case["conclusions"]) == 5, str(grades))
-    check("档位规则：条款→A／仅标准号→D／通用做法与构造项→C／不判声明→N", grades == ["A", "D", "C", "C", "N"], str(grades))
+    check("档位规则：条款→A／仅标准号→D／通用做法与构造项→C／不判声明→N", grades == ["D", "D", "C", "C", "N"], str(grades))
+    # ── F02（审计 2026-11-17，E05）：编号＋条号不得无证据自动升 A ──
+    c1 = case["conclusions"][0]
+    check("T06 编号＋条号不自动升 A（条款候选须待核）", c1["grade"] == "D", c1["grade"])
+    check("T06 注记不自报已取证", "已取证" not in c1.get("note", ""), c1.get("note", ""))
+    quoted, _ = build("- **燃烧性能**：按 GB 99999-2020 第 999.9 条，「测试条文逐字。」\n",
+                      title="F02", project="隔离测试", stage="咨询", date="2026-11-17",
+                      source_name="f02.md", template="reply_letter", conditions=None)
+    q1 = quoted["conclusions"][0]
+    check("T07 答复含逐字但缺载体身份与页锚仍不升 A", q1["grade"] == "D", q1["grade"])
+    hand = json.loads(json.dumps(case))
+    hand["conclusions"][0]["grade"] = "A"
+    hand["conclusions"][0]["note"] = "自动定档：条款承载已取证（条款号＋逐字＋页锚），待人工确认。"
+    check("T08 契约拒绝自动定档的 A 档", bool(validate_case(hand)))
+    hand["conclusions"][0]["note"] = ""
+    check("T08 人工复核确认的 A 档契约仍放行", not validate_case(hand),
+          "；".join(validate_case(hand)[:3]))
+    kept_f02 = merge_review_note("自动定档：条款号取自答复自报，条文原文与页锚未取证，待人工确认。", False, "已核条款")
+    check("T08 复核不改档保留待核判据", kept_f02.startswith("定档依据：") and "未取证" in kept_f02, kept_f02)
     check("无条件断言不入结论", all("更好用" not in c["conclusion"] for c in case["conclusions"]))
     check("未收录断言进待审", any("未收录断言 1 条" in r for r in review if isinstance(r, str)))
 
@@ -677,6 +700,8 @@ def _write_receipt(args, st: dict | None, case: dict | None = None) -> bool:
 
     返回 False＝请求了本体但被拒写（红件或合并后契约不过），调用方须据此判红，不得照印 PASS。
     本体落盘前重跑 `validate_case`：主流程只校了不含 standards 的 case，合并块须另校。
+    零引用态（审计 F01/T05）：本体不带随件块（空 rows 不得冒充已核验），以本轮实际状态
+    覆盖旧件；回执显式记录零引用态。
     """
     if st is None:
         return True
@@ -691,20 +716,187 @@ def _write_receipt(args, st: dict | None, case: dict | None = None) -> bool:
             print("交付件本体未落盘：出口闸 FAIL——红件不得以交付件本体形式落盘（回执仍留作判定证据）",
                   file=sys.stderr)
             return False
-        merged = dict(case, standards=st)
-        errs = validate_case(merged)
+        if st.get("zero_citation"):
+            body, note = dict(case, meta=dict(case["meta"])), "零引用、无随件块"
+            body.pop("standards", None)
+            revision = dict(body["meta"]["revision"])
+            revision["note"] = "；".join(filter(None, (revision.get("note"),
+                                                     "本轮零引用，未跑引用核验，不背书旧件")))
+            body["meta"]["revision"] = revision
+        else:
+            body, note = dict(case, standards=st), "台账随件"
+        errs = validate_case(body)
         if errs:
             print(f"交付件本体未落盘：契约 FAIL（{len(errs)} 项）——{errs[0]}", file=sys.stderr)
             return False
         p = Path(args.out)
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes((json.dumps(merged, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
-        print(f"交付件本体（台账随件）：{p}")
+        p.write_bytes((json.dumps(body, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+        print(f"交付件本体（{note}）：{p}")
+    return True
+
+
+_ANSWER_BINARY_MAGIC = (
+    (b"PK\x03\x04", "ZIP 容器件（DOCX／XLSX／PPTX）"),
+    (b"%PDF", "PDF 件"),
+    (b"\xd0\xcf\x11\xe0", "OLE 复合文档件（旧版 DOC／XLS／PPT）"),
+)
+# HTML 文档只在**文档根**判定（doctype 或首 element 即 <html>）：Markdown 正文合法内嵌
+# HTML 标签，按「含标签」判定会把第 12 轮的 fail-open 守卫样本整批误拒（假红退化）。
+_HTML_DOC_RE = re.compile(r"(?:<!doctype\s+html\b|<html[\s>])", re.IGNORECASE)
+
+
+def _read_answer_text(path: Path) -> tuple[str | None, str | None]:
+    """答复件读取与格式闸（P49）：返回 (Markdown 文本, 拒判理由)，两者恰有一枚非 None。
+
+    出口闸的答复面只有 Markdown 一种口径（`build` 按 Markdown 结构解析）；HTML／DOCX 属
+    **来源材料**解析面，经 `--standards-sources` 由 `citation_ledger.collect` 消费，本闸不缩其面。
+    改前形制＝二进制件经 `read_text(encoding='utf-8')` 抛未捕获 `UnicodeDecodeError` 逸出 `main`
+    （rc=1＋traceback、stdout 零声明、旧 PASS 件原样残留），HTML 文档则被当 Markdown 解析后
+    只报「conclusions 至少一条」类误导判词（不指真因）。本函数把两支都收成受控拒判，
+    **不借机新增答复格式支持**。
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError as e:
+        return None, f"答复件不可读（{type(e).__name__}：{e}）"
+    for magic, name in _ANSWER_BINARY_MAGIC:
+        if raw.startswith(magic):
+            return None, (f"答复件是 {name}，不是 Markdown 答复件"
+                          f"（二进制件只可经 --standards-sources 作来源材料）")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        return None, (f"答复件不是 UTF-8 文本（{e.reason}，偏移 {e.start}），"
+                      f"不是可解析的 Markdown 答复件")
+    if _HTML_DOC_RE.match(text[:8192].lstrip("\ufeff").lstrip()):
+        return None, ("答复件是 HTML 文档，不是 Markdown 答复件"
+                      "（HTML 只可经 --standards-sources 作来源材料，其编号提取面不受影响）")
+    return text, None
+
+
+def _load_json_object(path: Path, what: str) -> tuple[dict | None, str | None]:
+    """输入件（台账／问题条目）的「可读＋可解析＋顶层为对象」合取（P46 与 P48 共用）。
+
+    返回 (对象, 拒判理由)，两者恰有一枚非 None。动因＝改前形制＝`json.loads` 抛
+    `JSONDecodeError`、顶层非对象时 `led.get`／`dict(rep, …)` 抛 `AttributeError`／`ValueError`
+    逸出 `main`（rc=1＋traceback、stdout 零声明、同路径旧 PASS 件原样残留），
+    第四十八枚回件 §四.1／第四十九枚回件 N1 一手实测。此类故障属**输入件**故障而非判定结论，
+    须走受控拒判；rc=2 与其余拒判支同形制，rc 语义不因此放宽。
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError as e:
+        return None, f"{what}不可读（{type(e).__name__}：{e}）"
+    try:
+        obj = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as e:
+        return None, f"{what}不可解析（{type(e).__name__}：{str(e)[:200]}）"
+    if not isinstance(obj, dict):
+        return None, f"{what}顶层须为 JSON 对象（现读 {type(obj).__name__}）"
+    return obj, None
+
+
+def _is_own_gate_artifact(p: Path, tool: str) -> bool:
+    """同路径件是否本工具自产判定件（P47）：顶层仅 gate、且 gate.tool 与本入口一致。
+
+    判不出即不覆盖＝把未经身份确认的文件当作自产件覆写的代价（销毁用户成果）高于
+    「本轮持久声明缺一枚件」；判据取归属（tool＋形状）而非取位置，覆盖同名件与覆盖用户
+    自有件在形状上不可区分时按不在场处理并如实声明。
+    """
+    try:
+        obj = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    gate = obj.get("gate") if isinstance(obj, dict) else None
+    return (isinstance(obj, dict) and set(obj) == {"gate"} and isinstance(gate, dict)
+            and gate.get("tool") == tool and gate.get("verdict") in GATE_VERDICTS)
+
+
+def _write_red_receipt(args, reason: str, errors: list[str] | None = None,
+                       refused: bool = False, tool: str = "answer_to_case.py --exit-gate",
+                       label: str = "出口闸", red_companion: bool = False,
+                       verification_ran: bool = False, stale_rendered=()) -> bool:
+    """红件轮覆盖回执：请求了 `--receipt` 时，上一轮的 PASS 回执不得留在同一路径冒充本轮判定。
+
+    动因＝独立复核第二十枚回件 N3（契约红早退不触回执，旧 PASS 回执字节前后全等）／
+    N4（补证异常时静默不写、stdout 照印 PASS）。主线 §4.1 步骤 6 的「不能以 PASS 留下旧件
+    造成误认」延伸到红件轮：rc 虽是权威判据，单独读回执文件的下游仍会把旧件读作本轮结论。
+    射程（据实声明）：本件只承载判定态与理由，**不含 verification／ledger 块**——
+    据 `gate.verdict == "FAIL"` 即止，不得从中读任何引用结论；引用结论仍由绿件轮的回执承载。
+    `verdict` 取闭集 `deliverable_render.GATE_VERDICTS` 的 "FAIL" 而不另立第三值＝拒判与不合格
+    的分野由 `gate.refused` 承载，改枚举须同批动契约单源与三面镜像，本批不取该路径。
+
+    两类轮次分开（发起人 2026-11-22 就 P42 裁定，据主线步骤 6）：
+    - rc=1 红件轮：一律覆盖（本轮请求了产物即须留下本轮的红件态）。
+    - rc=2 拒判轮（`refused=True`）：**同路径已有旧件才中和，无旧件不产新件**——第 12 轮
+      「拒判轮不留件」约定（`test_r12_html_unclosed_hidden_container_not_fail_open_at_exit`
+      的 `assertFalse(rp.exists())`，其现场从未预置旧件）防的是「拒判冒充已产出判定物」，
+      步骤 6 防的是「旧 PASS 件被读作本轮结论」；无旧件时后者不成立，两条约定不相交。
+      拒判件另以 `gate.stale_companion` 点名同路径旧本体（本体内容**不改写、不搬移**＝覆盖用户
+      交付物属对外不可逆动作，本批不取该路径，持久声明由回执承载）。
+    - rc=2 且只请求 `--out`、未请求 `--receipt`（第四十八枚回件唯一阻断项，P45）：判定凭证写
+      **本体旁证位** `<out 同名>.gate.json`，条件同样限「本体在场」＝本体不在场时无旧件、
+      不产新件。取旁证位而非覆盖本体的理由同上；旁证件与回执同形制，只承载判定态。
+    - 旁证位落盘前先经身份对撞（P47，CG-20261122-001）：该名由 `--out` 自动派生，交付目录内
+      可恰好已有同名**用户自有件**；`_is_own_gate_artifact` 不认即不覆盖，声明面退回 stderr
+      （该窄口的持久声明缺一枚件，是本支刻意取的取舍，翻转前置见执行记录）。
+
+    `tool`／`label` 由调用入口给定（P48，CG-20261122-001）＝评审入口的判定件不得自称
+    `--exit-gate`；归属错误会让下游按回执筛入口时把评审的拒判记到答疑面上。
+
+    第三枚形制（P52，CG-20261122-002）＝评审入口 **rc=1 契约 FAIL 轮**：该轮请求了文件输出
+    （`--out` 是必填）却没渲染，改前只有一句 stderr，未给 `--receipt` 时持久面零本轮声明（旧 PASS
+    回执／旧渲染件原样在场）。`red_companion=True` 使该轮在未给 `--receipt` 时也落旁证位，
+    **不受「无旧件不留件」约束**＝那条限的是 rc=2 拒判轮（拒判未形成判定），而契约 FAIL 本身
+    就是本轮已形成的判定。`verification_ran=True`＋`stale_rendered` 承载该轮的两条事实：
+    引用核验**已跑**（不得冒充「未跑」，也不得据此翻转只反映引用核验的 `gate.verdict`），
+    以及旧渲染件与随件数据的路径（字节不改写）。返回 True＝本轮失败状态已落持久件；
+    False＝未落（含旁证位被非本工具件占据的窄口），调用方须自行声明未落，不得静默。
+    """
+    out_path = Path(args.out) if getattr(args, "out", None) else None
+    if getattr(args, "receipt", None):
+        p = Path(args.receipt)
+        if refused and not p.exists():
+            return False
+        note = "回执"
+    else:
+        if not (out_path is not None and ((refused and out_path.exists()) or red_companion)):
+            return False
+        p = out_path.with_name(out_path.stem + ".gate.json")
+        note = "判定凭证（本体旁证位）"
+        if p.exists() and not _is_own_gate_artifact(p, tool):
+            # P47：旁证位名由 `--out` 派生，交付目录内可恰好已有同名用户件；未经身份确认
+            # 即覆写＝销毁用户成果。此处不产持久件，声明面退回 stderr（rc 仍 2＝不冒充放行）。
+            print(f"{label}{'拒判' if refused else '红件'}{note}未落盘：同路径件 {p} 经身份对撞"
+                  f"非本工具自产判定件，不覆盖用户文件——"
+                  f"{'本轮未形成判定，同路径旧回执／本体不得读作本轮结论' if refused else '本轮未渲染，同路径旧渲染件／随件数据仍属上一轮'}",
+                  file=sys.stderr)
+            return False
+    gate = {"verdict": "FAIL", "tool": tool,
+            "ran_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "reason": reason, "errors": list(errors or [])[:20],
+            "verification_ran": bool(verification_ran)}
+    if refused:
+        gate["refused"] = True
+        # 本体侧保守＝不改写、不搬移用户交付物（覆盖属对外不可逆动作），但拒判件须**点名**
+        # 同路径旧本体，使「不得读作本轮结论」落在持久载体上而非只落在 stderr。
+        if out_path is not None and out_path.exists():
+            gate["stale_companion"] = str(out_path)
+    if stale_rendered:
+        gate["stale_rendered"] = [str(x) for x in stale_rendered]
+    st = {"gate": gate}
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes((json.dumps(st, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    print(f"{label}{'拒判' if refused else '红件'}{note}"
+          f"{'（本件不承载引用结论）' if verification_ran else '（本轮未产引用结论）'}：{p}",
+          file=sys.stderr)
     return True
 
 
 def _ledger_closure_errors(led: dict, src_map: dict, srcs: list) -> list[str]:
-    """评审档台账须逐枚等于被评审文件的实抽结果（键集／引用点／年号／提及／外源标记／输入身份）。
+    """评审档台账须逐枚等于被评审文件的实抽结果（键集／引用点／年号／提及／点级提及与
+    年号明细／点级用途／外源标记／输入身份）。
 
     动因＝独立复核第一轮 B1/B2：行级 count 与 external 标记原先不受任何约束，手改一个整数
     即可让对外评审件报假引用点，手改一个布尔即可把编造键降为 WARN 放行。`collect()` 的 hits
@@ -730,6 +922,14 @@ def _ledger_closure_errors(led: dict, src_map: dict, srcs: list) -> list[str]:
             errs.append(f"{k} 年号 {r.get('cited_years')} ≠ 源文件实抽 {sorted(s['years'])}")
         if bool(r.get("mention")) != bool(s["mention"]):
             errs.append(f"{k} 提及标记与源文件实抽不符")
+        # 点级字段自 CG-20261117-004 起是 verify 的有效语义杠杆（行级仅回落），
+        # 须同受闭合对撞，否则手改点级明细可翻转评审判词（第二轮复核 R2-ERROR-1）。
+        if list(r.get("hit_mentions") or []) != [h["mention"] for h in s["hits"]]:
+            errs.append(f"{k} 点级提及明细与源文件实抽不符")
+        if list(r.get("hit_years") or []) != [h["year"] for h in s["hits"]]:
+            errs.append(f"{k} 点级年号明细与源文件实抽不符")
+        if list(r.get("hit_usages") or []) != [h["usage"] for h in s["hits"]]:
+            errs.append(f"{k} 点级用途明细与源文件实抽不符")
         if bool(r.get("external")) != bool(s["external"]):
             errs.append(f"{k} 外源标记与源文件实抽不符")
         if r.get("ack"):
@@ -747,6 +947,95 @@ def _ledger_closure_errors(led: dict, src_map: dict, srcs: list) -> list[str]:
     return errs
 
 
+def _ledger_reuse_errors(led: dict, fresh: dict, answer_path: Path | None = None) -> list[str]:
+    """外置台账复用前与当前答复实抽对撞（审计 F01/T01，E01）：输入身份／键集／年号／引用点数。
+
+    答疑档台账登记的对象＝当前答复自身，故事实集合必须等于当前文本实抽；不一致即拒绝
+    复用并给出重新提取路径。语义（mention/hit_mentions/hit_years/hit_usages）不在此对撞——复用时
+    一律以实抽覆写（见出口闸段），前像语义旧台账或手改提及标记不得把死标准降 WARN
+    （独立复核 ERROR-1）。
+    输入身份（第 4 轮终审阻断 2）：给了 answer_path 时，台账 inputs 须含当前答复的
+    路径/bytes/sha256 指纹，缺失或不符即拒复用——事实全同的另一文件旧台账不得骑乘放行。
+    external/ack 声明通道的现文本复核另在出口闸覆写段承担（声明词不在当前答复正文即剥除）。
+    评审档的逐枚闭合（含输入身份）另由 `_ledger_closure_errors` 承担。
+    """
+    errs: list[str] = []
+    if answer_path is not None:
+        from citation_ledger import _input_fingerprint
+        want = _input_fingerprint(answer_path)
+        want_path = str(answer_path.resolve())
+        inputs = led.get("inputs")
+        matched = isinstance(inputs, list) and any(
+            isinstance(it, dict) and isinstance(it.get("path"), str)
+            and str(Path(it["path"]).resolve()) == want_path
+            and it.get("bytes") == want["bytes"]
+            and it.get("sha256") == want["sha256"]
+            for it in inputs)
+        if not matched:
+            errs.append(f"输入身份不符：台账 inputs 缺当前答复 {answer_path.name} 的指纹"
+                        f"（路径/bytes/sha256）——事实全同的另一文件台账不得复用")
+    a = {r["key"]: r for r in led.get("rows") or [] if isinstance(r, dict) and r.get("key")}
+    b = {r["key"]: r for r in fresh.get("rows") or [] if isinstance(r, dict) and r.get("key")}
+    if set(a) != set(b):
+        errs.append(f"编号成员不闭合：台账多 {sorted(set(a) - set(b))}｜缺 {sorted(set(b) - set(a))}")
+    for k in sorted(set(a) & set(b)):
+        if sorted(str(y) for y in (a[k].get("cited_years") or [])) != \
+                sorted(str(y) for y in (b[k].get("cited_years") or [])):
+            errs.append(f"{k} 年号不符：台账 {a[k].get('cited_years')} ≠ 当前答复实抽 {b[k].get('cited_years')}")
+        if (a[k].get("count") or 0) != (b[k].get("count") or 0):
+            errs.append(f"{k} 引用点数不符：台账 {a[k].get('count')} ≠ 当前答复实抽 {b[k].get('count')}")
+    return errs
+
+
+def _zero_citation_block(led: dict, index_text: str, *, sources_given: bool,
+                         strict: bool, tool: str) -> dict:
+    """零引用态的随件块（审计 F01/T05）：显式记录「本轮无引用、未跑引用核验」。
+
+    契约对空 rows 必判 FAIL（「零引用是合法态，但不得冒充已核验」）——该判词即诚实声明，
+    回执不得被读作对任何旧件的有效性背书。
+    """
+    from citation_ledger import parse_index
+    from deliverable_render import REVIEW_QUALIFICATION
+
+    results = [["WARN", "零引用：本答复不含标准号，本轮未跑引用核验；本回执不构成对任何旧件的有效性背书"]]
+    return {
+        "ledger": led,
+        "zero_citation": True,
+        "verification": {
+            "mode": "review" if sources_given else "qa",
+            "strict": bool(strict),
+            "index_keys": sorted(parse_index(index_text)),
+            "red": 0, "yellow": 1, "green": 0,
+            "unverified": 0, "unindexed_undeclared": 0,
+            "results": results,
+        },
+        "cards": {"indexed": 0, "declared": 0, "cached": 0, "stale": 0, "missing": 0,
+                  "indexed_cached": 0, "indexed_stale": 0, "indexed_missing": 0,
+                  "states": [], "lines": []},
+        "qualification": REVIEW_QUALIFICATION,
+        "gate": {"verdict": "PASS", "tool": tool,
+                 "ran_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
+    }
+
+
+def _review_refuse(args, reason: str, errors: list[str] | None = None,
+                   details=()) -> int:
+    """评审入口 rc=2 拒判轮的声明面与中和面（P48，CG-20261122-001）。
+
+    第 47 轮的旧件中和只落在 `--exit-gate` 链上；`--review-report` 的拒判支此前留旧 PASS
+    件原样在场、stderr 零声明（第四十八枚回件 §四.3、第四十九枚回件 N3 一手实测）。评审档
+    与答疑档共用同一形制＝有旧件即中和、无旧件不留件，只保护一侧即半修。
+    `gate.tool` 取真实入口＝评审的拒判不得自称 `--exit-gate`，否则回执归属错误。
+    """
+    print(f"评审件 FAIL：{reason}——本轮未形成判定，"
+          f"同路径旧回执／评审件不得读作本轮结论", file=sys.stderr)
+    for x in details:
+        print(f"  - {x}", file=sys.stderr)
+    _write_red_receipt(args, f"拒判：{reason}——本轮未形成判定", errors, refused=True,
+                       tool="answer_to_case.py --review-report", label="评审件")
+    return 2
+
+
 def _review_report(ap, args) -> int:
     """文件评审件：机算台账 → 闭合校验 → 四轴核验 → 渲染 → 回执。问题条目由 `--findings` 数据给。
 
@@ -762,6 +1051,11 @@ def _review_report(ap, args) -> int:
     否则单独读回执会把「契约 FAIL 未渲染」误读成已放行。
     交付射程（第三轮 N27／第四轮 N38）：**对外交付面＝HTML 单件**；随件 `.json` 与回执含未脱敏
     verify 判词全文（内部编号／仓内路径／检索串／档位码），属内部判定证据，不得随 HTML 一并交付。
+    拒判轮（rc=2）的旧件处置（P48，CG-20261122-001）＝经 `_review_refuse` 统一走与答疑入口同一
+    形制（有旧件即中和、无旧件不留件），且不再以异常逸出冒充「本轮没跑、旧件仍可用」。
+    契约 FAIL 轮（rc=1，P52，CG-20261122-002）＝同一持久面纪律，但取该轮的两条事实：引用核验
+    **已跑**（回执带完整 `verification` 与 `review_contract`），本轮**未渲染**（旧渲染件与随件数据
+    字节不变并被 `stale_rendered` 点名）；未给 `--receipt` 时落本体旁证位，rc 不因补件而改动。
     """
     from citation_ledger import LedgerError, collect
     from deliverable_render import REVIEW_SCHEMA, render_review, validate_review
@@ -773,41 +1067,49 @@ def _review_report(ap, args) -> int:
     led_path, find_path = Path(args.standards_ledger), Path(args.findings)
     for p in (led_path, find_path):
         if not p.exists():
-            print(f"评审件 FAIL：输入不存在（{p}）", file=sys.stderr)
-            return 2
+            return _review_refuse(args, f"输入不存在（{p}）")
     srcs = [Path(p) for p in args.standards_sources]
     absent = [str(p) for p in srcs if not p.exists()]
     if absent:
-        print(f"评审件 FAIL：被评审文件不在场 {absent}——不得以跳过冒充通过", file=sys.stderr)
-        return 2
-    try:
-        led = json.loads(led_path.read_text(encoding="utf-8"))
-        rep = json.loads(find_path.read_text(encoding="utf-8"))
-    except (ValueError, OSError) as e:
-        print(f"评审件 FAIL：输入不可解析（{e}）", file=sys.stderr)
-        return 2
+        return _review_refuse(args, f"被评审文件不在场 {absent}（不得以跳过冒充通过）")
+    led, why = _load_json_object(led_path, "台账")
+    if why is None:
+        rep, why = _load_json_object(find_path, "问题条目")
+    if why is not None:
+        return _review_refuse(args, why)
     if not (led.get("rows") or []):
-        print("评审件 FAIL：台账零引用——不产回执，不冒充已核验", file=sys.stderr)
-        return 2
-    closure = _ledger_closure_errors(led, collect(srcs), srcs)
+        return _review_refuse(args, "台账零引用（不产评审件、不冒充已核验）")
+    try:
+        src_led = collect(srcs)
+    except LedgerError as e:
+        # 改前形制＝被评审文件本身无法判定时，LedgerError 逸出到 `main`（traceback＋旧件残留），
+        # 而答疑入口同一异常早有 rc=2 支＝两入口不对称。
+        return _review_refuse(args, f"被评审文件无法判定（{e}）")
+    closure = _ledger_closure_errors(led, src_led, srcs)
     if closure:
-        print(f"评审件 FAIL：台账与被评审文件不闭合（{len(closure)} 项）——附录须登记被评审文件的实抽引用，不得手改",
-              file=sys.stderr)
-        for x in closure[:10]:
-            print(f"  - {x}", file=sys.stderr)
-        return 2
+        return _review_refuse(args, f"台账与被评审文件不闭合（{len(closure)} 项）——"
+                              f"附录须登记被评审文件的实抽引用，不得手改", closure, closure[:10])
     index_text = INDEX_PATH.read_text(encoding="utf-8")
     try:
         st = audit_standards(led, index_text, sources=collect(srcs), strict=args.strict_standards,
                              fetch_missing=args.fetch_missing, fetch_budget=args.fetch_budget,
                              fetch_total=args.fetch_total, tool="answer_to_case.py --review-report")
     except LedgerError as e:
-        print(f"评审件 FAIL：引用台账无法判定（{e}）", file=sys.stderr)
-        return 2
+        return _review_refuse(args, f"引用台账无法判定（{e}）")
     rep = dict(rep, schema=REVIEW_SCHEMA, standards=st)
     errs = validate_review(rep)
     st["review_contract"] = {"verdict": "FAIL" if errs else "PASS", "errors": errs}
     _stamp_contract(st)
+    out = Path(args.out)
+    data_path = out.with_suffix(".json")
+    # 本轮尚未写任何产物（渲染在 errs 判定之后），故此处现读到的在场件一律属上一轮
+    stale_rendered = [p for p in (out, data_path) if p.exists()]
+    if errs and stale_rendered:
+        # P52（CG-20261122-002）：契约 FAIL 轮不渲染＝同路径旧渲染件与随件数据字节不变
+        # （不删除、不搬移、不冒充本轮），其关联须落在**持久面**上而非只落 stderr。
+        # 引用核验已跑的事实保留在 `st` 内（不得改写为「未跑」），`gate.verdict` 仍只反映
+        # 引用核验＝被评审文件的引用问题与评审件自身契约失败分属两轴，不得互相顶替。
+        st["gate"]["stale_rendered"] = [str(p) for p in stale_rendered]
     if args.receipt:
         p = Path(args.receipt)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -823,10 +1125,19 @@ def _review_report(ap, args) -> int:
         print(f"评审件契约 FAIL（{len(errs)} 项）：不渲染", file=sys.stderr)
         for x in errs:
             print(f"  - {x}", file=sys.stderr)
+        if not args.receipt:
+            # 未给 `--receipt` ≠ 未请求文件输出（`--out` 对本入口必填）——本轮的失败状态仍须有
+            # 可核载体。走出口闸同一条旁证通路（派生名＋身份对撞＋入口归属）；落不下时明示未落，
+            # 不伪称已记录成功。rc 仍取 1（契约红），不升 2＝拒判与契约失败不得混为一谈。
+            if not _write_red_receipt(args, f"评审件契约 FAIL（{len(errs)} 项）——本轮未渲染，"
+                                           f"同路径旧评审件不得读作本轮结论", errs,
+                                      tool="answer_to_case.py --review-report", label="评审件",
+                                      red_companion=True, verification_ran=True,
+                                      stale_rendered=stale_rendered):
+                print("评审件契约 FAIL 状态未落持久件（理由见上）——本轮未渲染，"
+                      "同路径旧渲染件／随件数据仍属上一轮", file=sys.stderr)
         return 1
-    out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    data_path = out.with_suffix(".json")
     raw = (json.dumps(rep, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     data_path.write_bytes(raw)
     out.write_bytes(render_review(rep, hashlib.sha256(raw).hexdigest(), data_path.name).encode("utf-8"))
@@ -860,11 +1171,13 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--sheet-inputs", nargs="+", metavar="JSON")
     ap.add_argument("--apply-review", metavar="REVIEW_JSON")
     ap.add_argument("--exit-gate", metavar="ANSWER_MD",
-                    help="交付出口闸：解析答复并跑契约校验，绿才允许交付；红列出违例供修订")
+                    help="交付出口闸：解析答复并跑契约校验，绿才允许交付；红列出违例供修订。"
+                         "答复件限 Markdown 文本；HTML 文档／二进制件（DOCX·PDF 等）受控拒判 rc=2")
     ap.add_argument("--standards-ledger", metavar="LEDGER_JSON",
-                    help="可选：标准引用台账（citation_ledger.py extract 产物），随出口闸跑引用核验。"
+                    help="可选：标准引用台账（citation_ledger.py extract 产物），仅在与当前答复实抽"
+                         "身份对撞（输入指纹／键集／年号／引用点数）通过后随出口闸复用，不符即拒绝并提示重新提取。"
                          "两档差异：评审档（--review-report）禁 ack／external 手改（闭合校验逐枚对实抽）；"
-                         "答疑/出口闸档 ack/external 为显式声明通道，须调用方自负理由")
+                         "答疑/出口闸档 external 声明须在当前答复正文逐字在场（否则剥除），ack 不经复用保留")
     ap.add_argument("--standards-sources", nargs="+", metavar="TXT",
                     help="可选：源文件文本；给出时对台账施加「漏引／归因错误」双向覆盖判据")
     ap.add_argument("--strict-standards", action="store_true",
@@ -893,7 +1206,14 @@ def main(argv: list[str]) -> int:
         return _review_report(ap, args)
     if args.exit_gate:
         path = Path(args.exit_gate)
-        text = path.read_text(encoding="utf-8")
+        text, why = _read_answer_text(path)
+        if why is not None:
+            # P49：不支持的答复格式＝受控拒判，不得以解码异常逸出（旧 PASS 件原样残留且零声明），
+            # 也不得让 HTML 文档被当 Markdown 解析后只报误导性的正文契约错误。
+            print(f"出口闸 FAIL：{why}——本轮未形成判定，同路径旧回执／本体不得读作本轮结论",
+                  file=sys.stderr)
+            _write_red_receipt(args, f"拒判：{why}——本轮未形成判定", refused=True)
+            return 2
         case, _ = build(text, title=path.stem, project="交付出口", stage=args.stage,
                         date=args.date, source_name=path.name, template="reply_letter", conditions=None)
         errs = validate_case(case)
@@ -901,25 +1221,86 @@ def main(argv: list[str]) -> int:
             print(f"出口闸 FAIL（{len(errs)} 项）：修订答复后重跑，不得交付红件", file=sys.stderr)
             for x in errs:
                 print(f"  - {x}", file=sys.stderr)
+            _write_red_receipt(args, "答复契约 FAIL：引用核验未跑，本件不承载引用结论", errs)
             return 1
-        # 标准引用核验：默认对答复自身建台账（技术答疑／交付件两场景自动生效）。
-        # 给出 --standards-ledger 时以该台账为准；零引用不判（合法态），不冒充「已核验」。
-        from citation_ledger import LedgerError, collect, ledger_from_texts, verify
+        # 标准引用核验（审计 F01 重写，E01）：一律先对当前答复实抽；外置台账仅在与实抽
+        # 身份对撞（输入指纹／键集／年号／引用点数）通过后复用；零引用仍校验显式来源一致性，
+        # 请求回执/本体时显式记录本轮实际状态，不留旧件冒充已核验。
+        from citation_ledger import LedgerError, build_ledger, collect, verify
         led_path = Path(args.standards_ledger) if args.standards_ledger else None
         if led_path is not None and not led_path.exists():
-            print(f"出口闸 FAIL：标准引用台账不存在（{led_path}）", file=sys.stderr)
+            print(f"出口闸 FAIL：标准引用台账不存在（{led_path}）——本轮未形成判定，"
+                  f"同路径旧回执／本体不得读作本轮结论", file=sys.stderr)
+            _write_red_receipt(args, f"拒判：标准引用台账不存在（{led_path}）——本轮未形成判定",
+                               refused=True)
+            return 2
+        src_paths = [Path(p) for p in (args.standards_sources or [])]
+        absent = [str(p) for p in src_paths if not p.exists()]
+        if absent:
+            print(f"出口闸 FAIL：源文件不在场 {absent}——不得以跳过冒充通过；"
+                  f"本轮未形成判定，同路径旧回执／本体不得读作本轮结论", file=sys.stderr)
+            _write_red_receipt(args, f"拒判：源文件不在场 {absent}——本轮未形成判定",
+                               refused=True)
             return 2
         st = None
         try:
-            led = (json.loads(led_path.read_text(encoding="utf-8")) if led_path is not None
-                   else ledger_from_texts({path.name: text}))
+            fresh = build_ledger([path])
+            led = fresh
+            if led_path is not None:
+                ext, why = _load_json_object(led_path, "标准引用台账")
+                if why is not None:
+                    print(f"出口闸 FAIL：{why}——拒绝复用；本轮未形成判定，"
+                          f"同路径旧回执／本体不得读作本轮结论", file=sys.stderr)
+                    _write_red_receipt(args, f"拒判：{why}——本轮未形成判定", refused=True)
+                    return 2
+                reuse_errs = _ledger_reuse_errors(ext, fresh, path)
+                if reuse_errs:
+                    print(f"出口闸 FAIL：外置台账与当前答复实抽不符（{len(reuse_errs)} 项）——拒绝复用；"
+                          f"请对当前答复重新提取（citation_ledger.py extract {path.name}）；"
+                          f"本轮未形成判定，同路径旧回执／本体不得读作本轮结论", file=sys.stderr)
+                    for x in reuse_errs:
+                        print(f"  - {x}", file=sys.stderr)
+                    _write_red_receipt(args, f"拒判：外置台账与当前答复实抽不符"
+                                             f"（{len(reuse_errs)} 项）——本轮未形成判定",
+                                       reuse_errs, refused=True)
+                    return 2
+                # 语义事实一律以当前实抽为准（独立复核 ERROR-1）：前像语义旧台账／手改
+                # 提及标记不得把死标准降 WARN 放行。声明通道须以当前答复可见文本为根据
+                # （第 4 轮终审阻断 2/T01）：external 仅当当前文本声明词实抽成立才保留，
+                # 否则视为过期声明剥除；ack 无正文声明词对应（抽取器不产），复用一律剥除
+                # ——未收录声明须写入答复正文（「源文件外依据」等），不得只改台账标记。
+                fresh_by_key = {r["key"]: r for r in fresh["rows"]}
+                for r in ext.get("rows") or []:
+                    if not isinstance(r, dict):
+                        continue  # 非法行交 verify 判 LedgerError（rc=2），不在此崩溃
+                    f = fresh_by_key.get(r.get("key"))
+                    if f is not None:
+                        for field in ("mention", "hit_mentions", "hit_years", "hit_usages", "hits"):
+                            r[field] = f[field]
+                        r["external"] = bool(f.get("external"))
+                        r.pop("ack", None)
+                ext["inputs"] = fresh["inputs"]
+                led = ext
             n_rows = len(led.get("rows") or [])
+            index_text = INDEX_PATH.read_text(encoding="utf-8")
+            sources = collect(src_paths) if src_paths else None
             if n_rows == 0:
-                print("标准引用：0 枚（本件不含标准号，跳过引用核验）")
+                hard = [f"漏引：源文件有 {k}，答复零引用" for k in sorted(sources)] if sources else []
+                st = _zero_citation_block(led, index_text, sources_given=bool(src_paths),
+                                          strict=args.strict_standards,
+                                          tool="answer_to_case.py --exit-gate")
+                if hard:
+                    st["verification"]["results"] = [["FAIL", m] for m in hard]
+                    st["verification"]["red"] = len(hard)
+                    st["verification"]["yellow"] = 0
+                    st["gate"]["verdict"] = "FAIL"
+                    _write_receipt(args, st, case)
+                    print(f"出口闸 FAIL（零引用而来源一致性 {len(hard)} 项）：修订答复后重跑", file=sys.stderr)
+                    for m in hard:
+                        print(f"  - {m}", file=sys.stderr)
+                    return 1
+                print("标准引用：0 枚（本件不含标准号，未跑引用核验；回执/本体显式记录零引用态）")
             else:
-                index_text = INDEX_PATH.read_text(encoding="utf-8")
-                sources = (collect([Path(p) for p in args.standards_sources])
-                           if args.standards_sources else None)
                 try:
                     st = audit_standards(led, index_text, sources=sources, strict=args.strict_standards,
                                          fetch_missing=args.fetch_missing,
@@ -935,22 +1316,42 @@ def main(argv: list[str]) -> int:
                     _print_cards(st)
                 hard = [m for lv, m in results if lv == "FAIL"]
                 if hard:
-                    _write_receipt(args, st, case)
+                    if st is None:
+                        _write_red_receipt(args, "标准引用核验 FAIL 且补证异常：本件不承载引用结论", hard)
+                    else:
+                        _write_receipt(args, st, case)
                     print(f"出口闸 FAIL（标准引用 {len(hard)} 项）：修订答复或台账后重跑", file=sys.stderr)
                     for m in hard:
                         print(f"  - {m}", file=sys.stderr)
                     return 1
                 print(f"标准引用核验 PASS：{n_rows} 枚 ｜ 黄 {sum(1 for lv, _ in results if lv == 'WARN')} 条")
         except LedgerError as e:
-            print(f"出口闸 FAIL：引用台账无法判定（{e}）", file=sys.stderr)
+            print(f"出口闸 FAIL：引用台账无法判定（{e}）——本轮未形成判定，"
+                  f"同路径旧回执／本体不得读作本轮结论", file=sys.stderr)
+            _write_red_receipt(args, f"拒判：引用台账无法判定（{e}）——本轮未形成判定",
+                               refused=True)
             return 2
+        if st is None and (args.receipt or args.out):
+            # 第二十枚回件 N4：补证异常时请求的回执／本体静默不写＝旧 PASS 件残留冒充本轮结论；
+            # 不请求产物的离线降级（仅台账核验、rc0）保持不变。
+            _write_red_receipt(args, "标准引用补证异常：本轮未完成核验，不得以旧件冒充已核验")
+            print("出口闸 FAIL：标准引用补证异常而本轮请求了产物／回执——静默不写会留旧件冒充已核验；"
+                  "须修复证据卡链，或不带 --receipt/--out 重跑（仅台账核验）", file=sys.stderr)
+            return 1
         if not _write_receipt(args, st, case):
             print("出口闸 FAIL：交付件本体未落盘（理由见上）——不得读作已放行", file=sys.stderr)
             return 1
         # 第四轮 N33：只给 --receipt 时块契约 FAIL 不影响返回值，stdout 须同句限定，不得单读误作已放行
         sc = (st or {}).get("standards_contract") or {}
-        qual = (f"｜随件块契约 FAIL（{len(sc.get('errors') or [])} 项）——见回执 standards_contract；"
-                f"引用核验本身 PASS" if sc.get("verdict") == "FAIL" else "")
+        if st is None:
+            qual = "｜补证异常：本轮仅跑台账核验（证据卡未更新），未产回执／本体"
+        elif (st or {}).get("zero_citation"):
+            qual = "｜零引用：未跑引用核验，回执已显式记录本轮状态（不背书旧件）"
+        elif sc.get("verdict") == "FAIL":
+            qual = (f"｜随件块契约 FAIL（{len(sc.get('errors') or [])} 项）——见回执 standards_contract；"
+                    f"引用核验本身 PASS")
+        else:
+            qual = ""
         print(f"出口闸 PASS：{path.name} ｜ 结论 {len(case['conclusions'])} 条 ｜ 对外必答 "
               f"{sum(1 for g in case['gaps'] if g.get('external') and g.get('kind', 'ask') == 'ask')} 条{qual}")
         return 0
@@ -1028,7 +1429,17 @@ def main(argv: list[str]) -> int:
             ap.error(f"--{req} 必填")
 
     path = Path(args.answer)
-    text = path.read_text(encoding="utf-8")
+    # P50（CG-20261122-002）：本入口此前对答复件走裸 `read_text(encoding="utf-8")`＝同一读取点在
+    # 出口闸早有格式闸、在答疑面没有（两支同因不同面）：二进制／非 UTF-8 件抛异常逸出（rc=1＋
+    # traceback＋零声明，旧草稿原样留在 `--out`），HTML 文档则被当 Markdown 解析后 rc=0 覆写旧草稿。
+    # 复用 `_read_answer_text`（不借机新增 HTML／DOCX 答复支持）＝受控拒判且不触写盘。
+    text, why = _read_answer_text(path)
+    if why is not None:
+        print(f"草稿未生成：{why}——本轮未产出交付件草稿，同路径旧草稿不得读作本轮结果",
+              file=sys.stderr)
+        _write_red_receipt(args, f"拒判：{why}——本轮未生成草稿", refused=True,
+                           tool="answer_to_case.py --answer", label="草稿入口")
+        return 2
     conds = json.loads(Path(args.conditions).read_text(encoding="utf-8")) if args.conditions else None
     cond_map = (json.loads(Path(args.conclusion_conditions).read_text(encoding="utf-8"))
                 if args.conclusion_conditions else None)

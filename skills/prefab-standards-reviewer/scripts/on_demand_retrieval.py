@@ -296,13 +296,18 @@ def find_card(ctx: Ctx, sid: str):
 
 
 def card_state(card: dict) -> str:
+    """新鲜度单源：缺失或非法到期字段判 unknown，不默认赋予有效性。
+
+    历史卡兼容判据＝凡 build_card 产物必带 expires_at；缺字段的旧卡按 unknown
+    处理（消费侧一律按「无有效卡」走重新取真），不追认有效。
+    """
     exp = (card.get("cache") or {}).get("expires_at")
     if not exp:
-        return "valid"
+        return "unknown"
     try:
         d = date.fromisoformat(exp)
     except Exception:
-        return "valid"
+        return "unknown"
     return "valid" if date.today() <= d else "stale"
 
 
@@ -436,15 +441,19 @@ def known_channel_ids(ctx: Ctx):
 _REFRESH_NOTE_RE = re.compile(r"；机器刷新 \d{4}-\d{2}-\d{2}（新增证据未经独立复核）")
 
 
-def _carry_review(old_card: dict | None, mode: str) -> str:
+def _carry_review(old_card: dict | None, mode: str, has_new_evidence: bool = True) -> str:
     """独立复核标记是证据出处的一部分，机器刷新不得把它抹成 unreviewed。
 
     保留原标记并追加刷新时点，让读者知道「复核覆盖的是旧证据、本轮新增未经复核」；
     追加项按固定形制先删后加，重复刷新不累积。
+    本轮没有新增证据时不追加注记——没有新增却写「机器刷新（新增证据未经独立复核）」
+    会让读者误以为本轮取到了新证据（审计 2026-11-17 F03）。
     """
     prev = ((old_card or {}).get("review_status") or "").strip()
     if not prev or prev == MACHINE_REVIEW:
         return MACHINE_REVIEW
+    if not has_new_evidence:
+        return prev
     base = _REFRESH_NOTE_RE.sub("", prev)
     return f"{base}；机器刷新 {today_str()}（新增证据未经独立复核）"
 
@@ -502,8 +511,20 @@ def build_card(ctx: Ctx, sid: str, name: str | None, results: list[dict],
     ttl_cfg = ctx.registry.get("ttl_days") or {}
     ttl_days = int(ttl_cfg.get("hit" if outcome == "hit" else "miss", 90 if outcome == "hit" else 7))
     created = ((old_card or {}).get("cache") or {}).get("created_at") or now_iso()
-    verified = today_str()
-    expires = (date.today() + timedelta(days=ttl_days)).isoformat()
+    # 尝试时间与成功取证时间分离（审计 2026-11-17 F03）：失败只更新尝试记录；
+    # 本轮无新增证据时保留旧核验日与到期日，过期卡继续过期，不得借合并续期。
+    old_cache = (old_card or {}).get("cache") or {}
+    has_new_evidence = bool(new_sources)
+    definitive_miss = any(r.get("state") in (STATE_FILTERED, STATE_NOT_COVERED) for r in results)
+    if has_new_evidence or (not sources and definitive_miss):
+        verified = today_str()
+        expires = (date.today() + timedelta(days=ttl_days)).isoformat()
+    elif sources:
+        verified = old_cache.get("verified_on")
+        expires = old_cache.get("expires_at")
+    else:
+        verified = None
+        expires = None
 
     return {
         "schema": SCHEMA,
@@ -529,6 +550,7 @@ def build_card(ctx: Ctx, sid: str, name: str | None, results: list[dict],
         "cache": {
             "created_at": created,
             "updated_at": now_iso(),
+            "last_attempt_on": today_str(),
             "verified_on": verified,
             "ttl_days": ttl_days,
             "expires_at": expires,
@@ -541,7 +563,7 @@ def build_card(ctx: Ctx, sid: str, name: str | None, results: list[dict],
             "corroborate": corroborate,
         },
         "channel_states": states,
-        "review_status": _carry_review(old_card, mode),
+        "review_status": _carry_review(old_card, mode, has_new_evidence),
         "generated_by": "on_demand_retrieval.py",
         "generated_at": now_iso(),
     }
@@ -1129,6 +1151,7 @@ def cmd_query(ctx: Ctx, sid: str) -> int:
         "standard_id": card.get("standard_id"),
         "cache_hit": state == "valid",
         "stale": state == "stale",
+        "card_state": state,
         "card": str(p).replace("\\", "/"),
         "citable_level": card.get("citable_level"),
         "canonical_name": card.get("canonical_name"),
@@ -1182,7 +1205,10 @@ def cmd_retrieve(ctx: Ctx, sid: str, name: str | None, budget: float | None, tot
         write_json(out_path, card)
     out = {
         "standard_id": card.get("standard_id"), "outcome": card.get("outcome"),
-        "cache_hit": False, "citable_level": card.get("citable_level"),
+        "cache_hit": False, "card_state": card_state(card),
+        "verified_on": (card.get("cache") or {}).get("verified_on"),
+        "expires_at": (card.get("cache") or {}).get("expires_at"),
+        "citable_level": card.get("citable_level"),
         "canonical_name": card.get("canonical_name"), "status": card.get("status"),
         "issued_date": card.get("issued_date"), "implemented_date": card.get("implemented_date"),
         "field_grades": card.get("field_grades"), "not_covered": card.get("not_covered"),
@@ -1354,6 +1380,70 @@ def _selftest() -> int:
                       [{"channel": "gov:sd", "state": "indeterminate", "reason": "fetch_failed"}])
     check("状态合并：命中不被失败覆盖", ms[0]["state"] == "hit"
           and (ms[0].get("last_attempt") or {}).get("reason") == "fetch_failed", ms)
+
+    # ── F03：尝试时间与成功取证时间分离（审计 2026-11-17 T09–T12）────────────────
+    fail_rs = [result("samr", STATE_INDETERMINATE, "fetch_failed", 10)]
+    stale_old = {"standard_id": "GB 99999-2020",
+                 "identity_sources": [{"carrier": "u", "sha256": "s", "level": "S2",
+                                       "parsed": {"code": "GB 99999-2020", "name": "测试标准"},
+                                       "fetched_at": "2020-01-01T00:00:00+00:00"}],
+                 "cache": {"created_at": "2020-01-01T00:00:00+00:00", "verified_on": "2020-01-01",
+                           "ttl_days": 90, "expires_at": "2020-04-01"}}
+    f1 = build_card(ctx, "GB 99999-2020", None, fail_rs, old_card=stale_old, mode="refresh")
+    check("T09 过期卡全失败不续期", card_state(f1) == "stale"
+          and f1["cache"]["expires_at"] == "2020-04-01"
+          and f1["cache"]["verified_on"] == "2020-01-01", f1["cache"])
+    check("T09 失败只更新尝试记录", f1["cache"].get("last_attempt_on") == today_str()
+          and f1["identity_sources"] == stale_old["identity_sources"], f1["cache"])
+    valid_old = {"standard_id": "GB 99999-2020", "identity_sources": stale_old["identity_sources"],
+                 "review_status": "独立复核通过（2026-11-10；reviewer=独立复核代理）",
+                 "cache": {"verified_on": "2026-11-10", "ttl_days": 90, "expires_at": "2099-12-31"}}
+    f2 = build_card(ctx, "GB 99999-2020", None, fail_rs, old_card=valid_old, mode="refresh")
+    check("T10 有效旧卡失败刷新保留历史证据不冒称本轮核实",
+          card_state(f2) == "valid" and f2["cache"]["verified_on"] == "2026-11-10"
+          and f2["cache"]["expires_at"] == "2099-12-31"
+          and f2["identity_sources"] == valid_old["identity_sources"], f2["cache"])
+    check("T10 无新增证据不追加机器刷新注记", f2["review_status"] == valid_old["review_status"],
+          f2["review_status"])
+    f3 = build_card(ctx, "GB 99999-2020", None, fail_rs, old_card=f1, mode="refresh")
+    check("T11 连续失败不无限续期", card_state(f3) == "stale"
+          and f3["cache"]["expires_at"] == "2020-04-01", f3["cache"])
+    ok_ev = {"channel": "samr", "level": "S2", "carrier": "u2", "sha256": "s2", "page": None,
+             "parsed": {"code": "GB 99999-2020", "name": "测试标准"},
+             "fetched_at": now_iso(), "elapsed_ms": 10}
+    f4 = build_card(ctx, "GB 99999-2020", None,
+                    [result("samr", STATE_HIT, "target_row", 10, evidence=ok_ev)],
+                    old_card=f3, mode="refresh")
+    check("T11 成功刷新才更新时效", card_state(f4) == "valid"
+          and f4["cache"]["verified_on"] == today_str()
+          and f4["cache"]["expires_at"] == (date.today() + timedelta(days=90)).isoformat(),
+          f4["cache"])
+    stale_path = card_file(ctx, "GB 99999-2020")
+    write_json(stale_path, f1)
+    lc_stale = lookup_card(ctx.root, "GB 99999-2020")
+    import contextlib
+    import io as _io
+    from unittest.mock import patch as _patch
+    buf = _io.StringIO()
+    with _patch.object(sys.modules[__name__], "run_channels", return_value=(fail_rs, 1.0)), \
+            contextlib.redirect_stdout(buf):
+        rc = cmd_retrieve(ctx, "GB 99999-2020", None, None, 120, True, True, False, False)
+    r_out = json.loads(buf.getvalue())
+    check("T12 检索返回/查询/缺口冒泡同一新鲜度结论",
+          r_out.get("card_state") == lc_stale["state"] == card_state(f1) == "stale"
+          and r_out.get("expires_at") == "2020-04-01", (r_out.get("card_state"), lc_stale["state"]))
+    ledger_f03 = ctx.root / "ledger_f03.json"
+    write_json(ledger_f03, {"rows": [{"key": "GB 99999", "cited_years": ["2020"], "count": 1,
+                                      "hits": [{"file": "x", "line": 1}]}]})
+    g_f03 = compute_gaps(ctx, ledger_f03)
+    check("T12 查询/缺口冒泡/交付消费侧一致", lc_stale["state"] == "stale"
+          and g_f03["tasks"][0]["state"] == "card_stale", (lc_stale["state"], g_f03["summary"]))
+    check("缺失到期字段不默认有效", card_state({"cache": {}}) == "unknown")
+    check("非法到期字段不默认有效", card_state({"cache": {"expires_at": "not-a-date"}}) == "unknown")
+    nohist = build_card(ctx, "GB 88888-2020", None, fail_rs)
+    check("无历史卡全失败不得冒称已核实", card_state(nohist) == "unknown"
+          and nohist["cache"]["verified_on"] is None and nohist["cache"]["expires_at"] is None,
+          nohist["cache"])
 
     pth = card_file(ctx, "JGJ/T 398-2017")
     write_json(pth, card)

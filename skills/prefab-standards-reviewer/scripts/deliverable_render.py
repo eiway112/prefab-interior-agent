@@ -46,7 +46,7 @@ NUMERALS = "一二三四五六七八九十"           # 章节序号（HTML 面�
 D_FORBIDDEN = ("规范要求", "规范规定", "标准要求", "应符合")
 LEDGER_SCHEMA = "citation-ledger/v1"
 STANDARDS_MODES = ("review", "qa")
-CARD_STATES = ("valid", "stale", "missing", "declared")
+CARD_STATES = ("valid", "stale", "missing", "declared", "unknown")
 GATE_VERDICTS = ("PASS", "FAIL")
 CARD_COUNT_KEYS = ("indexed", "cached", "stale", "missing", "declared",
                    "indexed_cached", "indexed_stale", "indexed_missing")
@@ -421,7 +421,7 @@ def validate_standards(st) -> list[str]:
         lines = []
     want_lines = {k for k in keys if k in state_of
                   and (state_of[k] in ("valid", "stale")
-                       or (state_of[k] == "missing" and not indexed_of.get(k)))}
+                       or (state_of[k] in ("missing", "unknown") and not indexed_of.get(k)))}
     got_lines = [x[0] for x in lines if isinstance(x, (list, tuple)) and len(x) == 2 and _s(x[0]).strip()]
     if len(got_lines) != len(lines):
         errs.append("standards.cards.lines 每项须为 [键, 提示] 二元组")
@@ -437,10 +437,10 @@ def validate_standards(st) -> list[str]:
         ("declared", lambda k: not indexed_of.get(k, False) and state_of[k] == "declared"),
         ("cached", lambda k: not indexed_of.get(k, False) and state_of[k] == "valid"),
         ("stale", lambda k: not indexed_of.get(k, False) and state_of[k] == "stale"),
-        ("missing", lambda k: not indexed_of.get(k, False) and state_of[k] == "missing"),
+        ("missing", lambda k: not indexed_of.get(k, False) and state_of[k] in ("missing", "unknown")),
         ("indexed_cached", lambda k: indexed_of.get(k, False) and state_of[k] == "valid"),
         ("indexed_stale", lambda k: indexed_of.get(k, False) and state_of[k] == "stale"),
-        ("indexed_missing", lambda k: indexed_of.get(k, False) and state_of[k] == "missing"),
+        ("indexed_missing", lambda k: indexed_of.get(k, False) and state_of[k] in ("missing", "unknown")),
     ]
     for name, pred in pop:
         if _is_int(cards.get(name)) and cards[name] != _n(pred):
@@ -642,6 +642,10 @@ def validate(case) -> list[str]:
             for word in D_FORBIDDEN:
                 if word in body:
                     errs.append(f"{at} 为 D 档却出现规范强制语「{word}」")
+        if grade == "A" and _s(c.get("note")).startswith("自动定档"):
+            # F02（CG-20261117-003）：自动提取只是引用候选，取证须人工复核；
+            # 自动定档产物不得带 A 档（人工复核后注记转「定档依据」或人工文字，不受此限）
+            errs.append(f"{at} A 档不得由自动定档产生（条款取证须人工复核确认）")
 
     warnings = case.get("warnings", [])
     if not isinstance(warnings, list):
@@ -833,7 +837,8 @@ def _withdrawn_table(case: dict) -> str:
 
 
 def _card_label(state: str) -> str:
-    return {"valid": "有效", "stale": "已过期", "missing": "无卡", "declared": "已声明外源"}.get(state, "无卡")
+    return {"valid": "有效", "stale": "已过期", "missing": "无卡", "declared": "已声明外源",
+            "unknown": "无有效卡（到期字段缺失或非法）"}.get(state, "无卡")
 
 
 STANDARDS_HEADERS = ("标准编号", "引用年号", "引用点", "索引", "证据卡")
