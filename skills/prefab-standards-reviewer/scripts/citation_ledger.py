@@ -787,6 +787,33 @@ def visible_text(line: str) -> str:
 _ZERO_WIDTH = re.compile(r"[​‌‍⁠﻿]")
 
 
+_P41_TAIL_YEAR = re.compile(r"(?:19|20)\d{2}")
+
+
+def _p41_unit_db(plain: str, m, prefix: str) -> bool:
+    """P41 支B（CG-20261123-002）＝OCR 表列里的单位分贝被读成地标前缀。
+
+    判据四支同时成立才不收＝前缀为裸 `DB`＋前一非空字符是 `/` 且再前为汉字（`空气声计权隔声量/Db 41`
+    这类「量名/单位」形）＋匹配体自身不带年号＋其后既无 `/T`·`/J` 也无 14 字内年号
+    （真地标的三种写法 `DB 41/T 123-2020`／`DB 63/001-2019`／`按/DB 41-2020` 一律放行）。
+    射程止于「汉字量名 + `/` + 无年号裸 DB」＝不主张拦下全部斜杠写法（`见附录/DB 41` 同形者一并
+    不收，语料实测该形 0 处真成员；改前改后逐件差分见 CG-20261123-002 执行记录）。
+
+    同批的**支A（`pl200_gb55025_render` 目录名内嵌）判不在形状层收口**＝按左 `_`＋右词字符的同形
+    守卫在 994 件语料上连带打掉 `_GB50121官方承载面…`、`…_JGJT175-2018_第1-8章…` 等 26 处真引用面
+    （一手读数＝`〈过程目录〉/2026-11-23/r53_p41_g7.out`，另正则会回退到更短数字、造出
+    `GB 5502` 这类更坏的假成员，见 `r53_p41_diff2.out`）⇒ 判别子在语义层而非形状层，维持登记。
+    """
+    if prefix.strip().upper() != "DB":
+        return False
+    if m.group(4):
+        return False
+    if not re.search(r"[\u4e00-\u9fff]\s*/\s*$", plain[:m.start()]):
+        return False
+    tail = plain[m.end():m.end() + 14]
+    return not (_P41_TAIL_YEAR.search(tail) or re.match(r"\s*/\s*[TJ]\b", tail))
+
+
 def iter_citations(text: str, normalized: bool = False):
     line_offsets = _source_line_offsets(text)
     for plain, spans, breaks, basis in _visible_blocks(text, normalized):
@@ -826,6 +853,8 @@ def iter_citations(text: str, normalized: bool = False):
             prefix = ATLAS_PREFIX if atlas else norm_prefix(m.group(1), m.group(2))
             num = norm_num(m.group(1)) if atlas else norm_num(m.group(3))
             year = None if atlas else norm_year(m.group(4))
+            if not atlas and _p41_unit_db(plain, m, prefix):
+                continue
             yield prefix, num, year, ln, excerpt, usage, plain[left:right], position
 
 

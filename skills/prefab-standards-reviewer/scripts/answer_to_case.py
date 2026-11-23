@@ -733,6 +733,8 @@ def _write_receipt(args, st: dict | None, case: dict | None = None) -> bool:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes((json.dumps(body, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
         print(f"交付件本体（{note}）：{p}")
+        _revoke_stale_gate_companion(p, "answer_to_case.py --exit-gate", "出口闸",
+                                     Path(args.receipt) if args.receipt else None)
     return True
 
 
@@ -775,14 +777,20 @@ def _read_answer_text(path: Path) -> tuple[str | None, str | None]:
     return text, None
 
 
-def _load_json_object(path: Path, what: str) -> tuple[dict | None, str | None]:
-    """输入件（台账／问题条目）的「可读＋可解析＋顶层为对象」合取（P46 与 P48 共用）。
+def _load_json_object(path: Path, what: str,
+                      shape: tuple[type, ...] = (dict,)) -> tuple[object | None, str | None]:
+    """输入件（台账／问题条目／条件件／复核表输入件）的「可读＋可解码＋可解析＋顶层形状」合取。
 
     返回 (对象, 拒判理由)，两者恰有一枚非 None。动因＝改前形制＝`json.loads` 抛
     `JSONDecodeError`、顶层非对象时 `led.get`／`dict(rep, …)` 抛 `AttributeError`／`ValueError`
     逸出 `main`（rc=1＋traceback、stdout 零声明、同路径旧 PASS 件原样残留），
     第四十八枚回件 §四.1／第四十九枚回件 N1 一手实测。此类故障属**输入件**故障而非判定结论，
     须走受控拒判；rc=2 与其余拒判支同形制，rc 语义不因此放宽。
+
+    `shape` 由调用方按**该件的契约形状**给定（P54，CG-20261123-001；默认 `(dict,)`＝P46／P48
+    既有三支逐字不变）：`--conditions` 的合法顶层是数组，故该处取 `(dict, list)`＝只延伸
+    「可读＋可解码＋可解析」三支而**不加顶层形状闸**（顶层形状不匹配仍静默通过＝PL-304 行 ①
+    分流口径「畸形标记独有一支维持登记」的落点，本批不据此声称已拦全部畸形件）。
     """
     try:
         raw = path.read_bytes()
@@ -792,8 +800,11 @@ def _load_json_object(path: Path, what: str) -> tuple[dict | None, str | None]:
         obj = json.loads(raw.decode("utf-8"))
     except (ValueError, UnicodeDecodeError) as e:
         return None, f"{what}不可解析（{type(e).__name__}：{str(e)[:200]}）"
-    if not isinstance(obj, dict):
-        return None, f"{what}顶层须为 JSON 对象（现读 {type(obj).__name__}）"
+    if not isinstance(obj, shape):
+        if shape == (dict,):
+            return None, f"{what}顶层须为 JSON 对象（现读 {type(obj).__name__}）"
+        named = "／".join(t.__name__ for t in shape)
+        return None, f"{what}顶层须为 {named} 之一（现读 {type(obj).__name__}）"
     return obj, None
 
 
@@ -811,6 +822,42 @@ def _is_own_gate_artifact(p: Path, tool: str) -> bool:
     gate = obj.get("gate") if isinstance(obj, dict) else None
     return (isinstance(obj, dict) and set(obj) == {"gate"} and isinstance(gate, dict)
             and gate.get("tool") == tool and gate.get("verdict") in GATE_VERDICTS)
+
+
+def _revoke_stale_gate_companion(out_path: Path, tool: str, label: str,
+                                 receipt_path: Path | None = None) -> None:
+    """成功轮撤销上一轮的自产旁证判定件（P53，CG-20261123-001）。
+
+    改前形制（三支入口同因，一手读数＝`〈过程目录〉/2026-11-23/r52_probe_before.out`）＝
+    拒判／契约 FAIL 轮落的 `<out 同名>.gate.json` 在**随后的成功轮既不被追写也不消失**：
+    成功轮 stdout 照印 PASS，而该件仍逐字段读作上一轮的 FAIL＝同目录内两枚载体对本轮给出
+    相反声明，且本轮输出零提及它。
+
+    取「删除自产件」而非「覆写 PASS 态」＝发起人 2026-11-23 逐字裁定「撤销自产件（删除上一轮
+    旁证件），不采用覆写 PASS 态」。覆写会使旁证位长期在场，下游按「该件存在」即读到一枚
+    本轮从未请求过的 PASS 声明；删除后该目录回到成功轮本来就不产判定件的形制（既有用例
+    `test_r51_answer_entry_non_markdown_refused_without_touching_draft` 的正向对照
+    `assertFalse(side.exists())` 即该形制的在册断言）。
+
+    身份对撞先于删除（沿 P47 同一判据）：只删 `_is_own_gate_artifact` 认得的自产件；
+    判不出即不删并如实声明——删除不可逆，误删用户件的成本高于一枚过时凭证留在场的成本。
+
+    `receipt_path` 同名豁免（独立复核第一枚回件 N1）：`--receipt` 被显式指到 `<out stem>.gate.json`
+    这一派生名时，该件即**本轮自己刚写的回执**（用户指定的输出面），不属「上一轮遗留的旁证件」；
+    此时静默跳过＝既不删本轮载体，也不得对它印「非本工具自产件，不删除」（那句判词对
+    本轮 PASS 回执为假）。
+    """
+    side = out_path.with_name(out_path.stem + ".gate.json")
+    if not side.exists():
+        return
+    if receipt_path is not None and Path(receipt_path).resolve() == side.resolve():
+        return
+    if not _is_own_gate_artifact(side, tool):
+        print(f"{label}：同路径判定凭证 {side} 经身份对撞非本工具自产件，不删除"
+              f"（该件仍读作其自身轮次的判定，与本轮 PASS 无关）", file=sys.stderr)
+        return
+    side.unlink()
+    print(f"{label}：本轮已产出判定物，上一轮自产判定凭证已撤销（删除，不覆写 PASS 态）：{side}")
 
 
 def _write_red_receipt(args, reason: str, errors: list[str] | None = None,
@@ -838,6 +885,10 @@ def _write_red_receipt(args, reason: str, errors: list[str] | None = None,
     - rc=2 且只请求 `--out`、未请求 `--receipt`（第四十八枚回件唯一阻断项，P45）：判定凭证写
       **本体旁证位** `<out 同名>.gate.json`，条件同样限「本体在场」＝本体不在场时无旧件、
       不产新件。取旁证位而非覆盖本体的理由同上；旁证件与回执同形制，只承载判定态。
+    - rc=2 且请求了 `--receipt` 而该路径不在场（P55，CG-20261123-001）：改前双侧不落，
+      现按同一条旁证通路回落（条件与上一支一致＝本体在场才留件），使「回执没落到、旁证也没落到」
+      这一组合至少留下一枚可读的本轮失败声明；仍落不下时（无 `--out` 可派生名）返回 False，
+      由调用方声明未落，不得静默。
     - 旁证位落盘前先经身份对撞（P47，CG-20261122-001）：该名由 `--out` 自动派生，交付目录内
       可恰好已有同名**用户自有件**；`_is_own_gate_artifact` 不认即不覆盖，声明面退回 stderr
       （该窄口的持久声明缺一枚件，是本支刻意取的取舍，翻转前置见执行记录）。
@@ -855,24 +906,31 @@ def _write_red_receipt(args, reason: str, errors: list[str] | None = None,
     False＝未落（含旁证位被非本工具件占据的窄口），调用方须自行声明未落，不得静默。
     """
     out_path = Path(args.out) if getattr(args, "out", None) else None
+    side_path = out_path.with_name(out_path.stem + ".gate.json") if out_path is not None else None
+    via_sidecar = False
     if getattr(args, "receipt", None):
         p = Path(args.receipt)
-        if refused and not p.exists():
-            return False
         note = "回执"
+        if refused and not p.exists():
+            # P55（CG-20261123-001）：改前此支直接 return False＝回执与旁证位双侧不落，本轮零
+            # 持久载体、声明只在 stderr（登记现场＝`--receipt` 给定而该件不在场而旧本体在场）。
+            # 现回落到同一条旁证通路，条件仍取 rc=2 既有约定「无旧件不产新件」＝有旧本体才留件，
+            # 故本支不放宽第 12 轮约定；`--out` 不可派生旁证名时（该入口未给 `--out`）照旧不落。
+            if side_path is None or not out_path.exists():
+                return False
+            p, note, via_sidecar = side_path, "判定凭证（本体旁证位）", True
     else:
-        if not (out_path is not None and ((refused and out_path.exists()) or red_companion)):
+        if side_path is None or not ((refused and out_path.exists()) or red_companion):
             return False
-        p = out_path.with_name(out_path.stem + ".gate.json")
-        note = "判定凭证（本体旁证位）"
-        if p.exists() and not _is_own_gate_artifact(p, tool):
-            # P47：旁证位名由 `--out` 派生，交付目录内可恰好已有同名用户件；未经身份确认
-            # 即覆写＝销毁用户成果。此处不产持久件，声明面退回 stderr（rc 仍 2＝不冒充放行）。
-            print(f"{label}{'拒判' if refused else '红件'}{note}未落盘：同路径件 {p} 经身份对撞"
-                  f"非本工具自产判定件，不覆盖用户文件——"
-                  f"{'本轮未形成判定，同路径旧回执／本体不得读作本轮结论' if refused else '本轮未渲染，同路径旧渲染件／随件数据仍属上一轮'}",
-                  file=sys.stderr)
-            return False
+        p, note, via_sidecar = side_path, "判定凭证（本体旁证位）", True
+    if via_sidecar and p.exists() and not _is_own_gate_artifact(p, tool):
+        # P47：旁证位名由 `--out` 派生，交付目录内可恰好已有同名用户件；未经身份确认
+        # 即覆写＝销毁用户成果。此处不产持久件，声明面退回 stderr（rc 仍 2＝不冒充放行）。
+        print(f"{label}{'拒判' if refused else '红件'}{note}未落盘：同路径件 {p} 经身份对撞"
+              f"非本工具自产判定件，不覆盖用户文件——"
+              f"{'本轮未形成判定，同路径旧回执／本体不得读作本轮结论' if refused else '本轮未渲染，同路径旧渲染件／随件数据仍属上一轮'}",
+              file=sys.stderr)
+        return False
     gate = {"verdict": "FAIL", "tool": tool,
             "ran_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "reason": reason, "errors": list(errors or [])[:20],
@@ -1141,6 +1199,8 @@ def _review_report(ap, args) -> int:
     raw = (json.dumps(rep, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     data_path.write_bytes(raw)
     out.write_bytes(render_review(rep, hashlib.sha256(raw).hexdigest(), data_path.name).encode("utf-8"))
+    _revoke_stale_gate_companion(out, "answer_to_case.py --review-report", "评审件",
+                                 Path(args.receipt) if args.receipt else None)
     print(f"评审件契约 PASS｜问题 {len(rep['findings'])} 项｜数据 {data_path}｜渲染 {out}")
     print("  交付射程：对外交付面＝HTML 单件；随件 .json 与回执含未脱敏判词全文，属内部判定证据，不得随 HTML 一并交付。")
     if v["red"]:
@@ -1358,7 +1418,23 @@ def main(argv: list[str]) -> int:
     if args.apply_review:
         if not args.sheet_inputs:
             ap.error("--apply-review 需要 --sheet-inputs")
-        review = json.loads(Path(args.apply_review).read_text(encoding="utf-8"))
+        # P54（CG-20261123-001）：复核结果件与逐枚输入件此前都是裸 `read_text` ＋ `json.loads`，
+        # 任一枚不可读／非 UTF-8／不可解析即 traceback 逸出（rc=1、零声明），且**输入件按序改写**
+        # 会使前几枚已被本轮覆写、第 N 枚才崩＝半程状态。现先全量过闸、再逐个应用。
+        review, why = _load_json_object(Path(args.apply_review), "复核结果件")
+        if why is not None:
+            print(f"复核结果未应用：{why}——本轮未改写任何输入件，同路径旧件不得读作本轮结果",
+                  file=sys.stderr)
+            return 2
+        sheets: list[tuple[Path, str, dict]] = []
+        for p in args.sheet_inputs:
+            path = Path(p)
+            case, why = _load_json_object(path, "复核表输入件")
+            if why is not None:
+                print(f"复核结果未应用：{why}（{path}）——本轮未改写任何输入件，"
+                      f"同路径旧件不得读作本轮结果", file=sys.stderr)
+                return 2
+            sheets.append((path, path.stem.replace("20261109_", ""), case))
         by_q: dict[str, dict] = {}
         for it in review.get("items", []):
             by_q.setdefault(it["q"], {})[it["id"]] = it
@@ -1366,10 +1442,7 @@ def main(argv: list[str]) -> int:
         gaps_by_q: dict[str, list] = {}
         for g in review.get("gaps", []):
             gaps_by_q.setdefault(g.get("q", ""), []).append(g)
-        for p in args.sheet_inputs:
-            path = Path(p)
-            q = path.stem.replace("20261109_", "")
-            case = json.loads(path.read_text(encoding="utf-8"))
+        for path, q, case in sheets:
             for c in case["conclusions"]:
                 it = by_q.get(q, {}).get(c["id"])
                 if not it:
@@ -1417,7 +1490,13 @@ def main(argv: list[str]) -> int:
             ap.error("--review-sheet 需要 --sheet-inputs")
         pairs = []
         for p in args.sheet_inputs:
-            case = json.loads(Path(p).read_text(encoding="utf-8"))
+            # P54（CG-20261123-001）：同 `--apply-review` 支，输入件先过闸再渲染，
+            # 不得以 traceback 逸出冒充「本轮没跑」（rc=2＋本轮未渲染声明）。
+            case, why = _load_json_object(Path(p), "复核表输入件")
+            if why is not None:
+                print(f"复核表未生成：{why}（{p}）——本轮未渲染，同路径旧复核表不得读作本轮结果",
+                      file=sys.stderr)
+                return 2
             pairs.append((Path(p).stem.replace("20261109_", ""), case))
         out = Path(args.review_sheet)
         out.write_bytes(render_review_sheet(pairs).encode("utf-8"))
@@ -1440,14 +1519,32 @@ def main(argv: list[str]) -> int:
         _write_red_receipt(args, f"拒判：{why}——本轮未生成草稿", refused=True,
                            tool="answer_to_case.py --answer", label="草稿入口")
         return 2
-    conds = json.loads(Path(args.conditions).read_text(encoding="utf-8")) if args.conditions else None
-    cond_map = (json.loads(Path(args.conclusion_conditions).read_text(encoding="utf-8"))
-                if args.conclusion_conditions else None)
+    conds = cond_map = None
+    # P54（CG-20261123-001）：两处条件件此前是裸 `json.loads(Path(...).read_text(encoding="utf-8"))`
+    # ＝件不在场／非 UTF-8／不可解析一律 traceback 逸出（rc=1、stdout 零声明、旧草稿不被点名）。
+    # 同法延伸到既有 `_load_json_object`（零新增函数；`--conditions` 的合法顶层＝数组，见其 help
+    # 与本条正向对照读数，故取 `shape=(dict, list)`＝不加顶层形状闸，畸形形状维持登记）。
+    # 两支各用独立因变量（独立复核第一枚回件 阻-1）：共用一枚 `why` 时，后一支读取成功会把它
+    # 覆盖成 None＝前一支的坏件被静默丢件出草稿（rc=0），恰与本族要防的「静默丢件」同类。
+    why_conds = why_cc = None
+    if args.conditions:
+        conds, why_conds = _load_json_object(Path(args.conditions), "条件件", shape=(dict, list))
+    if args.conclusion_conditions:
+        cond_map, why_cc = _load_json_object(Path(args.conclusion_conditions), "结论条件件")
+    if why_conds is not None or why_cc is not None:
+        why = "；".join(w for w in (why_conds, why_cc) if w is not None)
+        print(f"草稿未生成：{why}——本轮未产出交付件草稿，同路径旧草稿不得读作本轮结果",
+              file=sys.stderr)
+        _write_red_receipt(args, f"拒判：{why}——本轮未生成草稿", refused=True,
+                           tool="answer_to_case.py --answer", label="草稿入口")
+        return 2
     case, review = build(text, title=args.title, project=args.project, stage=args.stage,
                          date=args.date, source_name=path.name, template=args.template, conditions=conds,
                          cond_map=cond_map)
     out = Path(args.out)
     out.write_bytes(json.dumps(case, ensure_ascii=False, indent=2).encode("utf-8"))
+    _revoke_stale_gate_companion(out, "answer_to_case.py --answer", "草稿入口",
+                                 Path(args.receipt) if args.receipt else None)
 
     print(f"解析：{path.name} ｜ {len(text.splitlines())} 行")
     print(f"结论 {len(case['conclusions'])} 条：" + " / ".join(f"{g} {sum(1 for c in case['conclusions'] if c['grade'] == g)}"
