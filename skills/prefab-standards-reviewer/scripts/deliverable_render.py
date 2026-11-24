@@ -288,7 +288,9 @@ JS = r"""
 
 
 def load_case(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
+    case = json.loads(path.read_bytes().decode("utf-8"))
+    case.setdefault("conditions", [])
+    return case
 
 
 def _s(value) -> str:
@@ -1998,25 +2000,60 @@ def verify(case_path: Path, out_path: Path) -> int:
 
 
 def _selftest(case_path: Path) -> int:
+    """自测入口收口：未受控异常一律收成一行 FAIL，不向调用方抛 traceback。
+
+    本入口按 CLI 宣传接受任意合法 CASE，崩溃即把合法输入误报成渲染器故障。
+    """
+    try:
+        return _run_selftest(case_path)
+    except Exception as exc:  # noqa: BLE001
+        print(f"[FAIL] 自测未受控异常：{type(exc).__name__}: {exc}")
+        return 1
+
+
+def _run_selftest(case_path: Path) -> int:
     raw = case_path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
-    case = json.loads(raw.decode("utf-8"))
+    case = load_case(case_path)
     failures: list[str] = []
+    skipped: list[str] = []
 
     def check(name: str, ok: bool, detail: str = "") -> None:
         print(f"[{'PASS' if ok else 'FAIL'}] {name}{(' — ' + detail) if detail and not ok else ''}")
         if not ok:
             failures.append(name)
 
+    def skip(name: str, why: str) -> None:
+        print(f"[SKIP] {name} — {why}")
+        skipped.append(name)
+
+    def inject(name: str, mutate) -> None:
+        """负向件须先证非空操作：注入后与夹具全等者无对象可判，判红与假绿都是空跑。"""
+        before = json.dumps(case, ensure_ascii=False, sort_keys=True)
+        clone = copy.deepcopy(case)
+        mutate(clone)
+        if json.dumps(clone, ensure_ascii=False, sort_keys=True) == before:
+            skip(name, "注入值与夹具现值全等＝空操作")
+            return
+        check(name, bool(validate(clone)))
+
     errs = validate(case)
     check("契约校验通过", not errs, "; ".join(errs))
+
+    def refused_by_contract(tpl: str, exc: Exception) -> bool:
+        """无 conditions 件拒渲工作面＝render_sheet 与 docx 面的契约判据，不是渲染器故障。"""
+        return (tpl == "conclusion_sheet" and not case["conditions"]
+                and isinstance(exc, ValueError) and "可改条件" in str(exc))
 
     outs = {}
     for tpl in TEMPLATES:
         try:
             outs[tpl] = render(case, digest, case_path.name, tpl)
         except Exception as exc:  # noqa: BLE001
-            check(f"{tpl} 渲染无异常", False, repr(exc))
+            if refused_by_contract(tpl, exc):
+                skip(f"{tpl} 渲染无异常", "本件无 conditions，工作面按契约拒渲")
+            else:
+                check(f"{tpl} 渲染无异常", False, repr(exc))
             continue
         check(f"{tpl} 渲染确定性（两次一致）", outs[tpl] == render(case, digest, case_path.name, tpl))
         check(f"{tpl} 无外部资源引用", "http://" not in outs[tpl] and "https://" not in outs[tpl])
@@ -2024,7 +2061,10 @@ def _selftest(case_path: Path) -> int:
         try:
             pkg = render_docx(case, digest, case_path.name, tpl)
         except Exception as exc:  # noqa: BLE001
-            check(f"{tpl} docx 渲染无异常", False, repr(exc))
+            if refused_by_contract(tpl, exc):
+                skip(f"{tpl} docx 渲染无异常", "本件无 conditions，工作面按契约拒渲")
+            else:
+                check(f"{tpl} docx 渲染无异常", False, repr(exc))
             continue
         doc = docx_member(pkg, "word/document.xml")
         text = docx_text(pkg)
@@ -2052,17 +2092,30 @@ def _selftest(case_path: Path) -> int:
         visible = [c["id"] for c in case["conclusions"] if _applicable(c, state)]
         check("工作面：默认态行数 = 服务端渲染行数", sheet.count('<td class="cid">') == len(visible))
         check("工作面：含交互入口", all(k in sheet for k in ('data-cond=', 'data-gap=', 'id="exportBtn"')))
+    else:
+        skip("工作面：结论逐字／行数／交互入口三断言", "本件无 conditions，工作面不可渲，无对象可判")
 
     letter = outs.get("reply_letter", "")
     if letter:
-        check("对外件：无内部编号", not re.search(r"\bC\d+\b", letter) and "PL-" not in letter and "IC-" not in letter and "CG-" not in letter)
+        # 身份行（.sub）载发行人元数据，属既有裁定豁免面；剥离判据须与
+        # deliverable_acceptance_test.test_letter_external_discipline 同口径，不得两侧各判一套。
+        body = re.sub(r'<div class="sub">.*?</div>', "", letter, flags=re.S)
+        check("对外件：正文无内部编号", not re.search(r"\bC\d+\b", body) and "PL-" not in body and "IC-" not in body and "CG-" not in body)
+        check("对外件：身份行豁免面有实指", '<div class="sub">' in letter)
         check("对外件：档位码与技能路由码被清除",
               _ext("（S1：GB 50037）由厨卫技能（BK）出节点，引 MI-R-P0-1").strip()
               == "（GB 50037）由厨卫技能出节点，引")
-        check("对外件：不出现档位字母与图例", "档位" not in letter and "规范明文" not in letter)
+        # 判据对象是内部档位体系的字母与图例，不是工程散文里的普通名词「档位」（如「间距档位」）；
+        # 宽口径子串会把行业用词一并判红。
+        grade_hit = re.search(r"[ABCDN]\s*档|档位图例|规范明文", body)
+        check("对外件：不出现档位字母与图例", grade_hit is None,
+              grade_hit.group(0) if grade_hit else "")
         check("对外件：只列外部缺口", all(g["what"] in letter for g in case["gaps"] if g.get("external"))
               and all(g["what"] not in letter for g in case["gaps"] if not g.get("external")))
-        check("对外件：条件锁定写明", "已锁定条件" in letter)
+        if case["conditions"]:
+            check("对外件：条件锁定写明", "已锁定条件" in letter)
+        else:
+            check("对外件：无变量件声明未绑定条件", "未绑定可变条件" in letter)
 
     brief = outs.get("brief_card", "")
     if brief:
@@ -2073,74 +2126,79 @@ def _selftest(case_path: Path) -> int:
     stale = outs.get("conclusion_sheet", "").replace(digest, "0" * 64)
     check("负向注入：指纹不符判为陈旧件", not digest_matches(stale, digest))
 
-    bad1 = copy.deepcopy(case)
-    bad1["conclusions"][0]["grade"] = "D"
-    bad1["conclusions"][0]["conclusion"] = "按规范要求应采用 A 级"
-    check("负向注入：D 档写规范强制语被拒", bool(validate(bad1)))
+    inject("负向注入：D 档写规范强制语被拒", lambda c: c["conclusions"][0].update(
+        grade="D", conclusion="按规范要求应采用 A 级"))
+    inject("负向注入：缺『不能判什么』被拒", lambda c: c["scope"].update(cannot_judge=[]))
+    inject("负向注入：缺件指向不存在结论被拒", lambda c: c["gaps"][0].update(affects=["C99"]))
+    inject("负向注入：条件引用未声明维度被拒", lambda c: c["conclusions"][0].update(when={"nosuch": ["x"]}))
+    inject("负向注入：缺『可推翻条件』被拒", lambda c: c.update(overturn=[]))
+    inject("负向注入：缺签位被拒", lambda c: c["meta"].update(issuer={}))
+    inject("负向注入：存疑缺定案条件被拒", lambda c: c["conclusions"][0].update(
+        review_status="存疑", doubt={"scope": "整条", "resolve": ""}))
 
-    bad2 = copy.deepcopy(case)
-    bad2["scope"]["cannot_judge"] = []
-    check("负向注入：缺『不能判什么』被拒", bool(validate(bad2)))
+    # 三条注入的可达性各取决于夹具现态：槽位选错或条数不足时，判的是夹具形状而不是判据，
+    # 故注入函数自己把夹具带入规则可达态，而不是假定夹具已是规范富件。
+    def _doubt_on_confirmed(c):
+        g = next((x for x in c["conclusions"] if x.get("review_status") != "存疑"), None)
+        if g is None:
+            g = c["conclusions"][0]
+            g.pop("review_status", None)
+        g["doubt"] = {"scope": "整条", "resolve": "补齐后重判"}
 
-    bad3 = copy.deepcopy(case)
-    bad3["gaps"][0]["affects"] = ["C99"]
-    check("负向注入：缺件指向不存在结论被拒", bool(validate(bad3)))
+    inject("负向注入：非存疑条目带 doubt 被拒", _doubt_on_confirmed)
 
-    bad4 = copy.deepcopy(case)
-    bad4["conclusions"][0]["when"] = {"nosuch": ["x"]}
-    check("负向注入：条件引用未声明维度被拒", bool(validate(bad4)))
-
-    bad5 = copy.deepcopy(case)
-    bad5["overturn"] = []
-    check("负向注入：缺『可推翻条件』被拒", bool(validate(bad5)))
-
-    bad6 = copy.deepcopy(case)
-    bad6["meta"]["issuer"] = {}
-    check("负向注入：缺签位被拒", bool(validate(bad6)))
-
-    bad7 = copy.deepcopy(case)
-    bad7["conclusions"][0]["review_status"] = "存疑"
-    bad7["conclusions"][0]["doubt"] = {"scope": "整条", "resolve": ""}
-    check("负向注入：存疑缺定案条件被拒", bool(validate(bad7)))
-
-    bad8 = copy.deepcopy(case)
-    bad8["conclusions"][0]["doubt"] = {"scope": "整条", "resolve": "补齐后重判"}
-    check("负向注入：非存疑条目带 doubt 被拒", bool(validate(bad8)))
-
-    bad9 = copy.deepcopy(case)
-    bad9["gaps"][0]["external"] = True
-    bad9["gaps"][0]["what"] = "隔声量口径取 Rw+C 还是 Rw+Ctr"
-    check("负向注入：把判定口径问回去被拒", bool(validate(bad9)))
-
-    bad10 = copy.deepcopy(case)
-    bad10["gaps"][0]["kind"] = "assume"
-    check("负向注入：按默认推进缺默认值与验证节点被拒", bool(validate(bad10)))
-
-    bad11 = copy.deepcopy(case)
-    for g in bad11["gaps"]:
-        g["external"] = True
+    # 口径转嫁规则只在非 assume 的对外缺件支生效，默认推进要件规则只在 assume 支生效：
+    # 注入须落到规则可达的槽位，否则判的是「夹具恰好不在此态」而不是判据本身。
+    def _to_judgment_ask(c):
+        g = next((x for x in c["gaps"] if x.get("external") and x.get("kind", "ask") != "assume"), c["gaps"][0])
         g["kind"] = "ask"
-    check("负向注入：对外必答超过 3 条被拒", bool(validate(bad11)))
+        g["external"] = True
+        g["what"] = "隔声量口径取 Rw+C 还是 Rw+Ctr"
 
-    rich = copy.deepcopy(case)
-    shown = [c for c in rich["conclusions"] if _applicable(c, _default_state(rich))]
-    rich["withdrawn"] = [{"id": rich["conclusions"][0]["id"], "item": "原结论",
-                          "conclusion": "原答复中经复核不成立的表述", "reason": "复核判定不成立，依据见下。"}]
-    shown[0]["review_status"] = "存疑"
-    shown[0]["doubt"] = {"scope": "整条", "resolve": "补齐设计文件后重判"}
-    shown[1]["review_status"] = "存疑"
-    shown[1]["doubt"] = {"scope": "「该句」", "resolve": "给出同口径造价"}
-    rl = render(rich, digest, "selftest.json", "reply_letter")
-    check("对外件：更正引用原表述并说明理由", "原答复：「原答复中经复核不成立的表述」" in rl and "已更正的表述" in rl)
-    check("对外件：整条存疑印原文但标未确认", shown[0]["conclusion"] in rl and "本条整体尚未确认" in rl)
-    check("对外件：部分存疑只标该句并给定案条件", shown[1]["conclusion"] in rl
-          and "其中「该句」尚待核实" in rl and "定案条件：" in rl)
-    check("对外件：章节按序编号", all(f"{n}、" in rl for n in "一二三四五六"))
-    sr = copy.deepcopy(case)
-    sr["conclusions"][0]["review_status"] = "存疑"
-    sr["conclusions"][0]["doubt"] = {"scope": "「该句」", "resolve": "补造价口径"}
-    sh = render(sr, digest, "selftest.json", "conclusion_sheet")
-    check("工作面：标出存疑范围与定案条件", "存疑范围：「该句」" in sh and "定案条件：补造价口径" in sh)
+    def _to_assume_missing(c):
+        g = next((x for x in c["gaps"] if x.get("kind") == "assume"), c["gaps"][0])
+        g["kind"] = "assume"
+        g.pop("default", None)
+        g.pop("verify_at", None)
+
+    def _over_cap_ask(c):
+        while len(c["gaps"]) < 4:
+            c["gaps"].append(copy.deepcopy(c["gaps"][0]))
+        for g in c["gaps"]:
+            g["external"] = True
+            g["kind"] = "ask"
+
+    inject("负向注入：把判定口径问回去被拒", _to_judgment_ask)
+    inject("负向注入：按默认推进缺默认值与验证节点被拒", _to_assume_missing)
+    inject("负向注入：对外必答超过 3 条被拒", _over_cap_ask)
+
+    shown = [c for c in case["conclusions"] if _applicable(c, _default_state(case))]
+    if len(shown) < 2:
+        skip("对外件：更正／整条存疑／部分存疑／章节编号四断言", "本件适用结论不足 2 条，无两枚存疑槽位")
+    else:
+        rich = copy.deepcopy(case)
+        rshown = [c for c in rich["conclusions"] if _applicable(c, _default_state(rich))]
+        rich["withdrawn"] = [{"id": rich["conclusions"][0]["id"], "item": "原结论",
+                              "conclusion": "原答复中经复核不成立的表述", "reason": "复核判定不成立，依据见下。"}]
+        rshown[0]["review_status"] = "存疑"
+        rshown[0]["doubt"] = {"scope": "整条", "resolve": "补齐设计文件后重判"}
+        rshown[1]["review_status"] = "存疑"
+        rshown[1]["doubt"] = {"scope": "「该句」", "resolve": "给出同口径造价"}
+        rl = render(rich, digest, "selftest.json", "reply_letter")
+        check("对外件：更正引用原表述并说明理由", "原答复：「原答复中经复核不成立的表述」" in rl and "已更正的表述" in rl)
+        check("对外件：整条存疑印原文但标未确认", _ext(rshown[0]["conclusion"]) in rl and "本条整体尚未确认" in rl)
+        check("对外件：部分存疑只标该句并给定案条件", _ext(rshown[1]["conclusion"]) in rl
+              and "其中「该句」尚待核实" in rl and "定案条件：" in rl)
+        check("对外件：章节按序编号", all(f"{n}、" in rl for n in "一二三四五六"))
+
+    if case["conditions"]:
+        sr = copy.deepcopy(case)
+        sr["conclusions"][0]["review_status"] = "存疑"
+        sr["conclusions"][0]["doubt"] = {"scope": "「该句」", "resolve": "补造价口径"}
+        sh = render(sr, digest, "selftest.json", "conclusion_sheet")
+        check("工作面：标出存疑范围与定案条件", "存疑范围：「该句」" in sh and "定案条件：补造价口径" in sh)
+    else:
+        skip("工作面：标出存疑范围与定案条件", "本件无 conditions，工作面按契约不可渲，不得强制渲染")
 
     asm = copy.deepcopy(case)
     asm["gaps"][0]["kind"] = "assume"
@@ -2153,7 +2211,9 @@ def _selftest(case_path: Path) -> int:
           and al.split("需贵方提供或确认的事项")[1].count("提供方：") ==
           sum(1 for g in asm["gaps"] if g.get("external") and g.get("kind", "ask") == "ask"))
 
-    print(f"\n结果：{'全部通过' if not failures else '失败 ' + str(len(failures)) + ' 项'} ｜ 形态 {len(TEMPLATES)} 种 ｜ 结论 {len(case['conclusions'])} 条 ｜ 缺件 {len(case['gaps'])} 条")
+    print(f"\n结果：{'全部通过' if not failures else '失败 ' + str(len(failures)) + ' 项'}"
+          f" ｜ 形态 {len(TEMPLATES)} 种 ｜ 结论 {len(case['conclusions'])} 条 ｜ 缺件 {len(case['gaps'])} 条"
+          f" ｜ 跳过 {len(skipped)} 项（跳过项无对象可判，不计入通过）")
     return 0 if not failures else 1
 
 
@@ -2180,7 +2240,7 @@ def main(argv: list[str]) -> int:
 
     target = Path(args.check or args.render[0])
     raw = target.read_bytes()
-    case = json.loads(raw.decode("utf-8"))
+    case = load_case(target)
     errs = validate(case)
     if errs:
         print(f"契约校验失败（{len(errs)} 项）：", file=sys.stderr)
