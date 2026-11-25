@@ -289,15 +289,20 @@ td.txt{max-width:520px}
 .tags{font-size:11px;color:var(--muted);margin-top:3px}
 .badge{display:inline-block;min-width:20px;text-align:center;padding:0 6px;border-radius:3px;color:#fff;font-weight:600}
 .g-A{background:#2e7d32}.g-B{background:#1565c0}.g-C{background:#6d4c41}.g-D{background:#b3261e}.g-N{background:#6b7280}
-select,input{font:inherit;border:1px solid #9aa4b0;border-radius:4px;padding:4px 6px;background:#fff;min-width:0}
+select,input,textarea{font:inherit;border:1px solid #9aa4b0;border-radius:4px;padding:4px 6px;background:#fff;min-width:0}
 select{width:78px}
-input{width:100%}
+input,textarea{width:100%}
+textarea{min-height:64px;resize:vertical}
 tr.done{background:#f2f8f3}
 @media print{.bar{position:static}.page{padding:0}button{display:none}}
 """
 
 SHEET_JS = r"""
 (function(){
+  function scriptJson(value){
+    return JSON.stringify(value).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026')
+      .replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
+  }
   var sels=[].slice.call(document.querySelectorAll('select[data-grade]'));
   function sync(){
     var done=sels.filter(function(s){return s.value;}).length;
@@ -305,16 +310,17 @@ SHEET_JS = r"""
     sels.forEach(function(s){s.closest('tr').classList.toggle('done', !!s.value);});
   }
   sels.forEach(function(s){s.addEventListener('change',sync);});
-  document.querySelectorAll('input[data-note]').forEach(function(i){i.addEventListener('input',sync);});
-  function collect(){
+  document.querySelectorAll('[data-note]').forEach(function(i){i.addEventListener('input',sync);});
+  function collect(includeEmpty){
     var items=sels.map(function(s){
       var tr=s.closest('tr');
       return {q:tr.getAttribute('data-q'), id:tr.getAttribute('data-id'), grade:s.value,
-              note:(tr.querySelector('input[data-note]')||{}).value||'',
+              note:(tr.querySelector('[data-note]')||{}).value||'',
               status:(tr.querySelector('select[data-status]')||{}).value||'',
               dscope:(tr.querySelector('input[data-dscope]')||{}).value||'',
               dresolve:(tr.querySelector('input[data-dresolve]')||{}).value||''};
-    }).filter(function(x){return x.grade||x.status||x.dscope||x.dresolve;});
+    });
+    if(!includeEmpty) items=items.filter(function(x){return x.grade||x.note||x.status||x.dscope||x.dresolve;});
     var gaps=[].slice.call(document.querySelectorAll('tr[data-gi]')).map(function(tr){
       return {q:tr.getAttribute('data-q'), gi:parseInt(tr.getAttribute('data-gi'),10),
               kind:(tr.querySelector('select[data-kind]')||{}).value||'ask',
@@ -324,15 +330,17 @@ SHEET_JS = r"""
     });
     return {items:items, gaps:gaps};
   }
+  function own(o,k){ return Object.prototype.hasOwnProperty.call(o,k); }
+  function restore(control,item,key){ if(control&&own(item,key)) control.value=item[key]==null?'':item[key]; }
   document.getElementById('expJson').addEventListener('click',function(){
-    var blob=new Blob([JSON.stringify(collect(),null,2)],{type:'application/json'});
+    var blob=new Blob([JSON.stringify(collect(false),null,2)],{type:'application/json'});
     var a=document.createElement('a');a.href=URL.createObjectURL(blob);
     a.download='grade_review.json';document.body.appendChild(a);a.click();a.remove();
     setTimeout(function(){URL.revokeObjectURL(a.href);},1500);
   });
   document.getElementById('expHtml').addEventListener('click',function(){
     var st=document.getElementById('saved-state');
-    st.textContent=JSON.stringify(collect());
+    st.textContent=scriptJson(collect(true));
     var doc='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
     var blob=new Blob([doc],{type:'text/html;charset=utf-8'});
     var a=document.createElement('a');a.href=URL.createObjectURL(blob);
@@ -343,22 +351,24 @@ SHEET_JS = r"""
   if(saved && saved.textContent.trim() && saved.textContent.trim()!=='null'){
     try{
       var st=JSON.parse(saved.textContent);
+      var itemRows=[].slice.call(document.querySelectorAll('tr[data-q][data-id]'));
       (st.items||[]).forEach(function(it){
-        var tr=document.querySelector('tr[data-q="'+it.q+'"][data-id="'+it.id+'"]');
+        var tr=itemRows.filter(function(r){return r.getAttribute('data-q')===it.q&&r.getAttribute('data-id')===it.id;})[0];
         if(!tr) return;
-        var s=tr.querySelector('select[data-grade]'); if(s&&it.grade) s.value=it.grade;
-        var n=tr.querySelector('input[data-note]'); if(n&&it.note) n.value=it.note;
-        var stt=tr.querySelector('select[data-status]'); if(stt&&it.status) stt.value=it.status;
-        var ds=tr.querySelector('input[data-dscope]'); if(ds&&it.dscope) ds.value=it.dscope;
-        var dr=tr.querySelector('input[data-dresolve]'); if(dr&&it.dresolve) dr.value=it.dresolve;
+        restore(tr.querySelector('select[data-grade]'),it,'grade');
+        restore(tr.querySelector('[data-note]'),it,'note');
+        restore(tr.querySelector('select[data-status]'),it,'status');
+        restore(tr.querySelector('input[data-dscope]'),it,'dscope');
+        restore(tr.querySelector('input[data-dresolve]'),it,'dresolve');
       });
+      var gapRows=[].slice.call(document.querySelectorAll('tr[data-q][data-gi]'));
       (st.gaps||[]).forEach(function(g){
-        var tr=document.querySelector('tr[data-q="'+g.q+'"][data-gi="'+g.gi+'"]');
+        var tr=gapRows.filter(function(r){return r.getAttribute('data-q')===g.q&&String(r.getAttribute('data-gi'))===String(g.gi);})[0];
         if(!tr) return;
-        var k=tr.querySelector('select[data-kind]'); if(k&&g.kind) k.value=g.kind;
-        var d=tr.querySelector('input[data-default]'); if(d) d.value=g.default||'';
-        var v=tr.querySelector('input[data-verify]'); if(v) v.value=g.verify_at||'';
-        var o=tr.querySelector('input[data-owner]'); if(o&&g.owner) o.value=g.owner;
+        restore(tr.querySelector('select[data-kind]'),g,'kind');
+        restore(tr.querySelector('input[data-default]'),g,'default');
+        restore(tr.querySelector('input[data-verify]'),g,'verify_at');
+        restore(tr.querySelector('input[data-owner]'),g,'owner');
       });
     }catch(e){}
   }
@@ -385,7 +395,7 @@ def render_review_sheet(pairs: list[tuple[str, dict]]) -> str:
                 f'　原文 L{e(str(c.get("_source_line", 0)))}</div></td>'
                 f'<td><span class="badge g-{e(c["grade"])}">{e(c["grade"])}</span></td>'
                 f'<td><select data-grade><option value="">—</option>{opts}</select></td>'
-                f'<td><input data-note placeholder="理由（可选）"></td>'
+                f'<td><textarea data-note placeholder="理由（可选）"></textarea></td>'
                 f'<td><select data-status><option value="">不改</option>'
                 f'<option value="存疑"{" selected" if st == "存疑" else ""}>存疑</option>'
                 f'<option value="清除"{" selected" if st and st != "存疑" else ""}>清除</option></select></td>'

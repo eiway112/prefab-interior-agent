@@ -187,27 +187,41 @@ footer{margin-top:22px;padding-top:12px;border-top:1px solid var(--line);font-si
 JS = r"""
 (function(){
   var D = JSON.parse(document.getElementById('data').textContent);
-  var state = {};
+  var state = Object.create(null);
   D.conditions.forEach(function(c){ state[c.id] = c['default']; });
 
+  function own(o,k){ return Object.prototype.hasOwnProperty.call(o,k); }
   var savedEl = document.getElementById('saved-state');
   var saved = null;
   try { if (savedEl && savedEl.textContent.trim()) saved = JSON.parse(savedEl.textContent); } catch(e){}
-  if (saved && saved.conditions) { Object.keys(saved.conditions).forEach(function(k){ if (k in state) state[k]=saved.conditions[k]; }); }
+  if (saved && saved.conditions) { Object.keys(saved.conditions).forEach(function(k){ if (own(state,k)) state[k]=saved.conditions[k]; }); }
+  if (saved && saved.gaps) {
+    document.querySelectorAll('[data-gap]').forEach(function(b,i){
+      if(Array.isArray(saved.gaps)) { if(i<saved.gaps.length) b.checked=!!saved.gaps[i]; }
+      else if(own(saved.gaps,b.getAttribute('data-gap'))) b.checked=!!saved.gaps[b.getAttribute('data-gap')];
+    });
+  }
 
   function matches(c){
     if (!c.when) return true;
     return Object.keys(c.when).every(function(k){ return (c.when[k]||[]).indexOf(state[k]) >= 0; });
   }
   function el(tag, cls, txt){ var e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; }
+  function scriptJson(value){
+    return JSON.stringify(value).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026')
+      .replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
+  }
+  function headlines(){
+    var seen=Object.create(null), out=[];
+    D.conclusions.filter(matches).forEach(function(c){
+      if(c.group){ if(own(seen,c.group)) return; seen[c.group]=1; }
+      out.push(c);
+    });
+    return out;
+  }
   function renderHeadline(){
-    var seen={}, groups=[];
-    D.conclusions.forEach(function(c){ if(c.group && !seen[c.group]){ seen[c.group]=1; groups.push(c.group); } });
     var box=document.getElementById('headline'); box.innerHTML='';
-    var any=false;
-    groups.forEach(function(g){
-      var c=D.conclusions.filter(function(x){ return x.group===g && matches(x); })[0];
-      if(!c) return; any=true;
+    headlines().forEach(function(c){
       var row=el('div','hl');
       row.appendChild(el('div','hl-item',c.item));
       row.appendChild(el('div','hl-text',c.conclusion));
@@ -217,7 +231,7 @@ JS = r"""
       row.appendChild(gcell);
       box.appendChild(row);
     });
-    if(!any) box.appendChild(el('p','note','当前条件组合下没有可判结论——请补充条件或转人工复核。'));
+    if(!box.firstChild) box.appendChild(el('p','note','当前条件组合下没有可判结论——请补充条件或转人工复核。'));
   }
   function renderTable(){
     var tb=document.getElementById('ctbody'); tb.innerHTML='';
@@ -268,9 +282,9 @@ JS = r"""
 
   var ex=document.getElementById('exportBtn');
   if(ex) ex.addEventListener('click', function(){
-    var gaps={}; document.querySelectorAll('[data-gap]').forEach(function(b){ gaps[b.getAttribute('data-gap')]=b.checked; });
+    var gaps=[]; document.querySelectorAll('[data-gap]').forEach(function(b){ gaps.push(b.checked); });
     var st=document.getElementById('saved-state');
-    if(st) st.textContent=JSON.stringify({conditions:state, gaps:gaps});
+    if(st) st.textContent=scriptJson({conditions:state, gaps:gaps});
     var doc='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
     var blob=new Blob([doc],{type:'text/html;charset=utf-8'});
     var a=document.createElement('a');
@@ -295,6 +309,13 @@ def load_case(path: Path) -> dict:
 
 def _s(value) -> str:
     return value if isinstance(value, str) else ""
+
+
+def script_json(value) -> str:
+    """Keep JSON inside a script raw-text element without HTML parser boundaries."""
+    return (json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+            .replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+            .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
 
 
 def _is_int(value) -> bool:
@@ -616,6 +637,8 @@ def validate(case) -> list[str]:
         for key in ("item", "conclusion", "conditions"):
             if not _s(c.get(key)).strip():
                 errs.append(f"{at}.{key} 不得为空")
+        if c.get("group") is not None and not isinstance(c.get("group"), str):
+            errs.append(f"{at}.group 必须是字符串或省略")
         grade = c.get("grade")
         if grade not in GRADES:
             errs.append(f"{at}.grade 必须是 {GRADES}")
@@ -787,23 +810,24 @@ def _ul(items) -> str:
     return "<ul>" + "".join(f"<li>{html.escape(str(x))}</li>" for x in items if str(x).strip()) + "</ul>"
 
 
-def _groups(case: dict) -> list[str]:
-    seen, groups = set(), []
-    for c in case["conclusions"]:
-        g = c.get("group")
-        if g and g not in seen:
-            seen.add(g)
-            groups.append(g)
-    return groups
+def _applicable_conclusions(case: dict, state: dict) -> list[dict]:
+    return [c for c in case["conclusions"] if _applicable(c, state)]
 
 
 def _headline_pairs(case: dict, state: dict) -> list[tuple[str, dict]]:
-    out = []
-    for g in _groups(case):
-        hit = next((c for c in case["conclusions"] if c.get("group") == g and _applicable(c, state)), None)
-        if hit:
-            out.append((g, hit))
+    out, seen = [], set()
+    for c in _applicable_conclusions(case, state):
+        group = c.get("group")
+        if group:
+            if group in seen:
+                continue
+            seen.add(group)
+        out.append((group or "", c))
     return out
+
+
+def _brief_pairs(case: dict, state: dict) -> list[tuple[str, dict]]:
+    return _headline_pairs(case, state)[:4]
 
 
 def _sign_table(case: dict) -> str:
@@ -1008,11 +1032,11 @@ def render_sheet(case: dict, digest: str, name: str) -> str:
 
     gap_rows = "".join(
         "<tr>"
-        f'<td><input class="gapbox" type="checkbox" data-gap="{e(g["what"])}" aria-label="已补齐"></td>'
+        f'<td><input class="gapbox" type="checkbox" data-gap="{e(g["what"])}" data-gap-index="{i}" aria-label="已补齐"></td>'
         f'<td>{e(g["what"])}</td><td>{e(g["why"])}</td><td>{e(g["owner"])}</td>'
         f"<td>{e(_gap_how(g))}</td>"
         "</tr>"
-        for g in case["gaps"]
+        for i, g in enumerate(case["gaps"])
     )
     step_rows = "".join(
         f"<tr><td>{i}</td><td>{e(s['action'])}</td><td>{e(s['owner'])}</td><td>{e(s['trigger'])}</td></tr>"
@@ -1043,7 +1067,7 @@ def render_sheet(case: dict, digest: str, name: str) -> str:
         f'<div class="note">{e(GRADE_LABEL[c["grade"]])}</div></td>'
         f'<td>{e(c["source"]["doc"])}<div class="note">{e(c["source"]["clause"])}</div></td>'
         "</tr>"
-        for c in case["conclusions"] if _applicable(c, state)
+        for c in _applicable_conclusions(case, state)
     )
     warns = "".join(
         f'<div class="warn"><strong>条件冲突</strong>{e(w["text"])}</div>'
@@ -1055,7 +1079,7 @@ def render_sheet(case: dict, digest: str, name: str) -> str:
         "conclusions": [dict(c, grade_label=GRADE_LABEL[c["grade"]]) for c in case["conclusions"]],
         "warnings": case.get("warnings", []),
     }
-    data_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    data_json = script_json(payload)
 
     default_headline = '<p class="note">当前条件组合下没有可判结论——请补充条件或转人工复核。</p>'
 
@@ -1075,7 +1099,7 @@ def render_sheet(case: dict, digest: str, name: str) -> str:
         f'<div id="warnings">{warns}</div>',
         "<h2>当前结论</h2>",
         f'<div id="headline">{headline or default_headline}</div>',
-        f'<h2>结论与依据（<span id="ccount">{len([c for c in case["conclusions"] if _applicable(c, state)])}</span> 条适用）</h2>',
+        f'<h2>结论与依据（<span id="ccount">{len(_applicable_conclusions(case, state))}</span> 条适用）</h2>',
         "<table><thead><tr><th>#</th><th>结论项</th><th>结论与适用条件</th><th>档位</th><th>依据</th></tr></thead>",
         f'<tbody id="ctbody">{rows}</tbody></table>',
         '<p class="legend">档位：A 规范明文（可核到条款）· B 可溯源报告 · C 行业通用做法或设计取值 · D 待核（不得作规范要求）· N 不适用。'
@@ -1140,9 +1164,7 @@ def render_letter(case: dict, digest: str, name: str) -> str:
     rev = meta["revision"]
 
     items = []
-    for c in case["conclusions"]:
-        if not _applicable(c, state):
-            continue
+    for c in _applicable_conclusions(case, state):
         doubt = c.get("doubt") or {}
         tail = ""
         if c.get("review_status") == "存疑":
@@ -1243,15 +1265,10 @@ def render_brief(case: dict, digest: str, name: str) -> str:
     rev = meta["revision"]
 
     rows = "".join(
-        f'<div class="crow"><div class="ck">{e(h["item"])}</div><div class="cv">{e(h["conclusion"])}</div></div>'
-        for _, h in _headline_pairs(case, state)
-    )
-    if not rows:
-        rows = "".join(
-            f'<div class="crow"><div class="ck">{e(c["item"])}</div><div class="cv">{e(c["conclusion"])}</div></div>'
-            for c in case["conclusions"][:4]
-        )
-    rows = rows or '<p class="note">当前条件下没有可判结论。</p>'
+        f'<div class="crow"><div class="ck">{e(c["item"])}</div><div class="cv">{e(c["conclusion"])}</div></div>'
+        for _, c in _brief_pairs(case, state)
+    ) or '<p class="note">当前条件下没有可判结论。</p>'
+    doubt_n = sum(1 for c in _applicable_conclusions(case, state) if c.get("review_status") == "存疑")
 
     gaps = "".join(f"<li>{e(g['what'])}（{e(g['owner'])}）</li>" for g in case["gaps"] if g.get("external"))
     steps = "".join(f"<li>{e(s['action'])}（{e(s['owner'])}，{e(s['trigger'])}）</li>" for s in case["next_steps"])
@@ -1274,9 +1291,9 @@ def render_brief(case: dict, digest: str, name: str) -> str:
         f'<div class="no"><b>会推翻结论的情况：</b>{e("；".join(x.rstrip("。") for x in case["overturn"]))}。</div>',
         (f'<div class="no"><b>已更正：</b>{len(case.get("withdrawn", []))} 条原答复表述经复核不成立，本件不予采用。</div>'
          if case.get("withdrawn") else ""),
-        (f'<div class="no"><b>尚待核实：</b>{sum(1 for c in case["conclusions"] if c.get("review_status") == "存疑")} 条结论未定案，'
+        (f'<div class="no"><b>尚待核实：</b>{doubt_n} 条结论未定案，'
          f'按各项所列定案条件补齐后再引用。</div>'
-         if any(c.get("review_status") == "存疑" for c in case["conclusions"]) else ""),
+         if doubt_n else ""),
         (f'<div class="no"><b>标准引用核验：</b>{e(standards_receipt(case["standards"]))}<br>'
          f'{e(case["standards"]["qualification"])}</div>' if case.get("standards") else ""),
         "<footer>",
@@ -1664,9 +1681,7 @@ def _dx_letter_blocks(case: dict, digest: str, name: str) -> list:
                ("note", DX_HINT)]
 
     items: list = []
-    for c in case["conclusions"]:
-        if not _applicable(c, state):
-            continue
+    for c in _applicable_conclusions(case, state):
         doubt = c.get("doubt") or {}
         tail = ""
         if c.get("review_status") == "存疑":
@@ -1735,7 +1750,7 @@ def _dx_sheet_blocks(case: dict, digest: str, name: str) -> list:
     meta, scop = case["meta"], case["scope"]
     rev = meta["revision"]
     state = _default_state(case)
-    shown = [c for c in case["conclusions"] if _applicable(c, state)]
+    shown = _applicable_conclusions(case, state)
     b: list = [("title", meta["title"]),
                ("sub", f'工作面 · 默认条件快照 ｜ {meta["project"]} ｜ {rev["version"]} ｜ {meta["issued_at"]}'),
                ("note", DX_HINT),
@@ -1764,7 +1779,7 @@ def _dx_sheet_blocks(case: dict, digest: str, name: str) -> list:
         if _s(c.get("note")).strip():
             note += f'\n{c["note"]}'
         rows.append([str(i), c["item"] + ("〔存疑〕" if c.get("review_status") == "存疑" else ""),
-                     f'适用条件：{c["conditions"]}{note}',
+                     f'{c["conclusion"]}\n适用条件：{c["conditions"]}{note}',
                      f'{c["grade"]} {GRADE_LABEL[c["grade"]]}',
                      f'{c["source"]["doc"]} {c["source"]["clause"]}'])
     b.append(_dx_table(["#", "结论项", "结论与适用条件", "档位", "依据"], rows, (5, 20, 40, 10, 25)))
@@ -1818,10 +1833,8 @@ def _dx_brief_blocks(case: dict, digest: str, name: str) -> list:
     """决策面 → Word 件：只给当前结论、关键缺件、下一步（与 HTML 面同取舍，判词不上面）。"""
     meta = case["meta"]
     state = _default_state(case)
-    pairs = _headline_pairs(case, state)
-    rows = [[h["item"], h["conclusion"]] for _, h in pairs] or \
-           [[c["item"], c["conclusion"]] for c in case["conclusions"][:4]]
-    doubt_n = sum(1 for c in case["conclusions"] if c.get("review_status") == "存疑")
+    rows = [[c["item"], c["conclusion"]] for _, c in _brief_pairs(case, state)]
+    doubt_n = sum(1 for c in _applicable_conclusions(case, state) if c.get("review_status") == "存疑")
     b: list = [("title", meta["title"]),
                ("sub", f'决策速览 · 只给结论、缺口与动作 ｜ {meta["project"]} ｜ {meta["stage"]}'),
                ("note", DX_HINT),
@@ -2089,7 +2102,7 @@ def _run_selftest(case_path: Path) -> int:
                or next(d for d in data["conclusions"] if d["id"] == cid)["conclusion"] != src[cid]["conclusion"]]
         check("工作面：结论文本逐字在件", not bad, ",".join(bad))
         state = _default_state(case)
-        visible = [c["id"] for c in case["conclusions"] if _applicable(c, state)]
+        visible = [c["id"] for c in _applicable_conclusions(case, state)]
         check("工作面：默认态行数 = 服务端渲染行数", sheet.count('<td class="cid">') == len(visible))
         check("工作面：含交互入口", all(k in sheet for k in ('data-cond=', 'data-gap=', 'id="exportBtn"')))
     else:
@@ -2119,7 +2132,9 @@ def _run_selftest(case_path: Path) -> int:
 
     brief = outs.get("brief_card", "")
     if brief:
-        check("决策面：含每组当前结论", all(h["conclusion"] in brief for _, h in _headline_pairs(case, _default_state(case))))
+        expected = _brief_pairs(case, _default_state(case))
+        check("决策面：含速览应显示的前四条适用摘要",
+              all(html.escape(c["conclusion"]) in brief for _, c in expected))
 
     for tpl, text in outs.items():
         check(f"{tpl} 指纹可提取且等于源 JSON", digest_matches(text, digest))

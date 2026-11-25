@@ -205,9 +205,10 @@ def http_get(url, referer=None, timeout=30, data=None, xhr=True, retries=0,
     if data is not None:
         headers["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8"
     t = time.perf_counter()
-    deadline = t + wall_budget if wall_budget else None
+    deadline = t + wall_budget if wall_budget is not None else None
     last_exc = None
     partial = 0
+    attempts = 0
     for attempt in range(retries + 1):
         left = (deadline - time.perf_counter()) if deadline is not None else None
         if left is not None and left <= 0:
@@ -216,6 +217,7 @@ def http_get(url, referer=None, timeout=30, data=None, xhr=True, retries=0,
         sock = min(timeout, left) if left is not None else timeout
         try:
             req = urllib.request.Request(url, headers=headers, data=data)
+            attempts += 1
             with urllib.request.urlopen(req, timeout=sock) as r:
                 chunks = []
                 # read1＝有多少取多少；read(n) 会阻塞等满 n 字节，deadline 就只在两次 read
@@ -234,7 +236,7 @@ def http_get(url, referer=None, timeout=30, data=None, xhr=True, retries=0,
                     b = gzip.decompress(b)
                 return {"ok": True, "status": int(r.status), "body": b,
                         "ms": round((time.perf_counter() - t) * 1000, 1), "error": None,
-                        "attempts": attempt + 1}
+                        "attempts": attempts}
         except Exception as exc:
             last_exc = exc
             if isinstance(exc, _WallClockExpired):
@@ -247,10 +249,11 @@ def http_get(url, referer=None, timeout=30, data=None, xhr=True, retries=0,
                 continue
             break
     err = ("wall_clock_budget" if isinstance(last_exc, _WallClockExpired)
+           or (deadline is not None and time.perf_counter() >= deadline)
            else f"{type(last_exc).__name__}: {last_exc}")
     return {"ok": False, "status": -1, "body": b"",
             "ms": round((time.perf_counter() - t) * 1000, 1),
-            "error": err, "partial_bytes": partial, "attempts": attempt + 1}
+            "error": err, "partial_bytes": partial, "attempts": attempts}
 
 
 def result(channel, state, reason, elapsed_ms=0, detail=None, evidence=None) -> dict:
@@ -1026,7 +1029,7 @@ class Budget:
 
     def __init__(self, socket_s: float, wall_s: float | None, retries: int = 1):
         self.socket = float(socket_s)
-        self.deadline = time.perf_counter() + wall_s if wall_s else None
+        self.deadline = time.perf_counter() + wall_s if wall_s is not None else None
         self.retries = int(retries)
 
     def left(self):
@@ -1035,16 +1038,20 @@ class Budget:
         return max(0.0, self.deadline - time.perf_counter())
 
     def call(self, url, referer=None, data=None, retries=None) -> dict:
+        left = self.left()
+        if left is not None and left <= 0:
+            return {"ok": False, "status": -1, "body": b"", "ms": 0.0,
+                    "error": "wall_clock_budget", "partial_bytes": 0, "attempts": 0}
         return http_get(url, referer, self.socket, data=data,
                         retries=self.retries if retries is None else retries,
-                        wall_budget=self.left())
+                        wall_budget=left)
 
 
 def channel_budget(ctx: Ctx, ch: str, override: float | None = None) -> Budget:
     cfg = (ctx.registry.get("budgets") or {})
     tier = cfg.get(ch) or cfg.get("default") or {}
     socket_s = float(tier.get("socket_s", 8))
-    wall_s = float(override) if override else float(tier.get("wall_s", 12))
+    wall_s = float(override) if override is not None else float(tier.get("wall_s", 12))
     return Budget(socket_s, wall_s, int(cfg.get("retry_attempts", 1)))
 
 
@@ -1194,7 +1201,7 @@ def cmd_retrieve(ctx: Ctx, sid: str, name: str | None, budget: float | None, tot
                       elapsed_ms=round((time.perf_counter() - t) * 1000, 1), budget_s=budget,
                       corroborate=corroborate)
     card["last_run"]["budget_tiers"] = {
-        ch: (budget if budget else float(((ctx.registry.get("budgets") or {}).get(ch)
+        ch: (budget if budget is not None else float(((ctx.registry.get("budgets") or {}).get(ch)
                                           or (ctx.registry.get("budgets") or {}).get("default")
                                           or {}).get("wall_s", 12)))
         for ch in route_for(ctx, sid)}
@@ -1469,6 +1476,107 @@ def _selftest() -> int:
     states = {t["key"]: t["state"] for t in g["tasks"]}
     check("gaps 已收录未验证", states.get("GB 50222") == "indexed_no_card", g)
     check("gaps 已缓存", states.get("JGJ/T 398") == "cached", g)
+
+    # ---- F07 预算边界（固定时钟与模拟响应，不出网）----
+    class _F07Response(_io.BytesIO):
+        status = 200
+        headers = {}
+
+    class _F07Clock:
+        def __init__(self):
+            self.now = 100.0
+
+        def __call__(self):
+            return self.now
+
+    for wall in (0, -1):
+        with _patch.object(time, "perf_counter", return_value=100.0), \
+                _patch.object(urllib.request, "urlopen", return_value=_F07Response(b"ok")) as request:
+            r = http_get("https://example.invalid/f07", timeout=1, wall_budget=wall)
+        check(f"T21 http_get wall_budget={wall} 零请求",
+              request.call_count == 0 and r["attempts"] == 0
+              and not r["ok"] and r["error"] == "wall_clock_budget", r)
+
+    for wall in (0, -1):
+        with _patch.object(time, "perf_counter", return_value=100.0), \
+                _patch.object(urllib.request, "urlopen", return_value=_F07Response(b"ok")) as request:
+            r = Budget(1, wall).call("https://example.invalid/f07")
+        check(f"T21 Budget wall_s={wall} 零请求",
+              request.call_count == 0 and r["attempts"] == 0
+              and not r["ok"] and r["error"] == "wall_clock_budget", r)
+
+    f07_ctx = Ctx(tmp / "skill", {
+        "routes": {"GB": ["samr", "openstd"]},
+        "channels": {"samr": {"endpoint": "https://example.invalid/{q}",
+                              "health_control": "GB/T 9999-2000"}},
+        "budgets": {"default": {"socket_s": 8, "wall_s": 1}, "retry_attempts": 1}})
+    with _patch.object(time, "perf_counter", return_value=100.0):
+        zero_override = channel_budget(f07_ctx, "samr", 0)
+    check("T21 零覆盖值不退化为默认档", zero_override.deadline == 100.0,
+          zero_override.deadline)
+
+    first_attempt_ticks = iter((100.0, 101.0, 101.0, 101.0))
+    with _patch.object(time, "perf_counter",
+                       side_effect=lambda: next(first_attempt_ticks)), \
+            _patch.object(urllib.request, "urlopen",
+                          return_value=_F07Response(b"ok")) as request:
+        r = http_get("https://example.invalid/f07", timeout=1,
+                     retries=1, wall_budget=1)
+    check("T21 正预算首请求前耗尽零请求",
+          request.call_count == 0 and r["attempts"] == 0
+          and not r["ok"] and r["error"] == "wall_clock_budget", r)
+
+    clock = _F07Clock()
+
+    def exhaust_first(*args, **kwargs):
+        clock.now += 2
+        raise urllib.error.URLError("temporary")
+
+    with _patch.object(time, "perf_counter", side_effect=clock), \
+            _patch.object(time, "sleep"), \
+            _patch.object(urllib.request, "urlopen", side_effect=exhaust_first) as request:
+        rs, _ = run_channels(f07_ctx, "GB/T 123-2020", None, None, 1, False, False)
+    check("T22 首请求耗尽后同通道与后续通道零请求",
+          request.call_count == 1 and len(rs) == 2 and rs[-1]["reason"] == "total_budget",
+          {"calls": request.call_count, "results": rs})
+
+    for label, wall in (("正预算", 5), ("无限预算", None)):
+        with _patch.object(time, "perf_counter", return_value=100.0), \
+                _patch.object(urllib.request, "urlopen", return_value=_F07Response(b"ok")) as request:
+            r = http_get("https://example.invalid/f07", timeout=1, wall_budget=wall)
+        check(f"T23 {label}首次成功", request.call_count == 1
+              and r["ok"] and r["attempts"] == 1 and r["error"] is None, r)
+
+    with _patch.object(time, "perf_counter", return_value=100.0), \
+            _patch.object(time, "sleep"), \
+            _patch.object(urllib.request, "urlopen",
+                          side_effect=[urllib.error.URLError("temporary"),
+                                       _F07Response(b"ok")]) as request:
+        r = http_get("https://example.invalid/f07", timeout=1, retries=1, wall_budget=5)
+    check("T23 瞬时失败重试成功", request.call_count == 2
+          and r["ok"] and r["attempts"] == 2 and r["error"] is None, r)
+
+    with _patch.object(time, "perf_counter", return_value=100.0), \
+            _patch.object(urllib.request, "urlopen",
+                          side_effect=urllib.error.HTTPError("u", 404, "Not Found", {}, None)) as request:
+        r = http_get("https://example.invalid/f07", timeout=1, retries=2, wall_budget=5)
+    check("T23 确定性 4xx 不重试", request.call_count == 1
+          and not r["ok"] and r["attempts"] == 1 and r["error"] != "wall_clock_budget", r)
+
+    clock = _F07Clock()
+    with _patch.object(time, "perf_counter", side_effect=clock), \
+            _patch.object(time, "sleep"), \
+            _patch.object(urllib.request, "urlopen", side_effect=exhaust_first) as request:
+        r = http_get("https://example.invalid/f07", timeout=1, retries=1, wall_budget=1)
+    check("T23 首次失败后耗尽不再重试", request.call_count == 1
+          and not r["ok"] and r["attempts"] == 1 and r["error"] == "wall_clock_budget", r)
+
+    with _patch.object(sys.modules[__name__], "run_channels", return_value=([], 0.0)), \
+            _patch.object(sys.modules[__name__], "write_json") as write, \
+            contextlib.redirect_stdout(_io.StringIO()):
+        rc = cmd_retrieve(f07_ctx, "GB/T 123-2020", None, 0, 1, True, False, False, True)
+    tiers = write.call_args.args[1]["last_run"]["budget_tiers"]
+    check("T23 预算回执保留零覆盖值", rc == 1 and tiers == {"samr": 0, "openstd": 0}, tiers)
 
     # ---- 预算与兜底（本地回环服务，不出网）----
     import threading
