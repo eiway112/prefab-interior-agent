@@ -18,7 +18,7 @@
 |---|---|
 | 引擎回归（SRE） | `skills/prefab-standards-reviewer/sre_regression_test.py` |
 | IC-07 合规回归 | `skills/prefab-standards-reviewer/sr_ic07_compliance_test.py` |
-| 包结构与安装复检 | `tools/smoke_test.py`、`tools/install.py` |
+| 包结构与安装复检 | `程序文件/tools/smoke_test.py`、`程序文件/tools/install.py` |
 | CI（每次 push 实跑） | `.github/workflows/smoke.yml`，矩阵见 `metrics.json` 的 `ci` 字段，结果见本仓 Actions 页 |
 | 示例输出 | `examples/`（真实应答样例） |
 
@@ -26,15 +26,15 @@
 
 ```sh
 # 1) 包结构自检
-python tools/smoke_test.py
+python 程序文件/tools/smoke_test.py
 
 # 2) 两套回归（随包，纯标准库）
 python skills/prefab-standards-reviewer/sre_regression_test.py
 python skills/prefab-standards-reviewer/sr_ic07_compliance_test.py
 
 # 3) 安装到临时目录后再复检（模拟真实安装）
-python tools/install.py --target /tmp/skills-check
-python tools/smoke_test.py --target /tmp/skills-check
+python 程序文件/tools/install.py --target /tmp/skills-check
+python 程序文件/tools/smoke_test.py --target /tmp/skills-check
 ```
 
 CI 在上述 OS × Python 版本矩阵上执行上述步骤（矩阵与组合数见 [`metrics.json`](metrics.json) 的 `ci` 字段）；本目录不保存 CI 结果快照。

@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 import sys
 from bisect import bisect_right
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
@@ -1137,11 +1138,13 @@ def load_text(path: Path) -> str:
     return path.read_bytes().decode("utf-8", errors="replace")
 
 
-def collect(files: list[Path]) -> dict:
+def collect(files: list[Path], *, package_root: Path | None = None) -> dict:
     """逐点用途与年号；HTML/DOCX 的位置基准为可见文本行，不是原文件物理行。"""
     rows: dict[str, dict] = {}
     for f in files:
         text = load_text(f)
+        identity = _input_fingerprint(f, package_root=package_root)
+        portable = {k: identity[k] for k in ("source_id", "relative_path") if k in identity}
         normalized = f.suffix.lower() in (".html", ".htm", ".docx")
         for prefix, num, year, ln, line, usage, vline, position in iter_citations(text, normalized):
             k = key_of(prefix, num)
@@ -1150,7 +1153,7 @@ def collect(files: list[Path]) -> dict:
                 r["years"].add(year)
             r["hits"].append({"file": str(f).replace("\\", "/"), "line": ln,
                               "text": line.strip()[:120], "mention": usage == "mention",
-                              "usage": usage, "year": year, **position})
+                              "usage": usage, "year": year, **position, **portable})
             if any(w in vline for w in EXTERNAL_WORDS):
                 r["external"] = True
     for r in rows.values():
@@ -1158,19 +1161,28 @@ def collect(files: list[Path]) -> dict:
     return rows
 
 
-def _input_fingerprint(path: Path) -> dict:
+def _input_fingerprint(path: Path, *, package_root: Path | None = None) -> dict:
     import hashlib
     data = path.read_bytes()
-    return {"path": str(path).replace("\\", "/"), "bytes": len(data),
-            "sha256": hashlib.sha256(data).hexdigest()}
+    sha = hashlib.sha256(data).hexdigest()
+    out = {"path": str(path).replace("\\", "/"), "bytes": len(data), "sha256": sha}
+    if package_root is not None:
+        root = Path(package_root).expanduser().resolve(strict=True)
+        resolved = path.expanduser().resolve(strict=True)
+        try:
+            relative = resolved.relative_to(root).as_posix()
+        except ValueError as exc:
+            raise LedgerError(f"输入越出交付包根：{path}") from exc
+        out.update(source_id=f"sha256:{sha}", relative_path=relative)
+    return out
 
 
-def build_ledger(files: list[Path]) -> dict:
-    rows = collect(files)
+def build_ledger(files: list[Path], *, package_root: Path | None = None) -> dict:
+    rows = collect(files, package_root=package_root)
     return {
         "schema": SCHEMA,
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "inputs": [_input_fingerprint(p) for p in files],
+        "inputs": [_input_fingerprint(p, package_root=package_root) for p in files],
         "count": len(rows),
         "rows": [
             {
@@ -1359,6 +1371,73 @@ def verify(ledger: dict, index_text: str, sources: dict | None = None,
     return out
 
 
+def rebind_ledger(ledger: dict, root: Path) -> dict:
+    import hashlib
+
+    if ledger.get("schema") != SCHEMA:
+        raise LedgerError(f"ledger schema 非法：{ledger.get('schema')!r}")
+    inputs = ledger.get("inputs")
+    if not isinstance(inputs, list) or not inputs:
+        raise LedgerError("可移植台账 inputs 为空或缺失")
+    root = root.expanduser().resolve(strict=True)
+    if not root.is_dir():
+        raise LedgerError(f"重绑定根不是目录：{root}")
+    rebound = copy.deepcopy(ledger)
+    path_map, identity_map, seen, old_paths = {}, {}, set(), set()
+    for item in rebound["inputs"]:
+        if not isinstance(item, dict):
+            raise LedgerError("可移植台账 inputs 含非法条目")
+        rel = item.get("relative_path")
+        sha = item.get("sha256")
+        size = item.get("bytes")
+        if (not isinstance(rel, str) or not rel or "\\" in rel or ":" in rel
+                or PurePosixPath(rel).is_absolute() or "/".join(PurePosixPath(rel).parts) != rel
+                or any(p in {".", ".."} for p in PurePosixPath(rel).parts)):
+            raise LedgerError(f"非法包内相对路径：{rel!r}")
+        if rel in seen:
+            raise LedgerError(f"包内相对路径重复：{rel}")
+        seen.add(rel)
+        if (not isinstance(sha, str) or len(sha) != 64
+                or not isinstance(size, int) or isinstance(size, bool) or size < 0
+                or item.get("source_id") != f"sha256:{sha}"):
+            raise LedgerError(f"内容身份字段无效：{rel}")
+        candidate = root.joinpath(*PurePosixPath(rel).parts).resolve(strict=True)
+        if not candidate.is_relative_to(root):
+            raise LedgerError(f"重绑定路径越界或链接逃逸：{rel}")
+        if not candidate.is_file():
+            raise LedgerError(f"重绑定输入不是普通文件：{rel}")
+        data = candidate.read_bytes()
+        if len(data) != size or hashlib.sha256(data).hexdigest() != sha:
+            raise LedgerError(f"重绑定内容身份不符（同名不同内容或缺件）：{rel}")
+        old = item.get("path")
+        if not isinstance(old, str) or not old:
+            raise LedgerError(f"可移植台账缺物理路径：{rel}")
+        if old in old_paths:
+            raise LedgerError(f"可移植台账物理路径重复：{old}")
+        old_paths.add(old)
+        new = str(candidate).replace("\\", "/")
+        path_map[old] = new
+        identity_map[old] = {"source_id": item["source_id"], "relative_path": rel}
+        item["path"] = new
+    for row in rebound.get("rows") or []:
+        if not isinstance(row, dict):
+            continue
+        for hit in row.get("hits") or []:
+            if not isinstance(hit, dict):
+                continue
+            old = hit.get("file")
+            if old not in path_map:
+                raise LedgerError(f"引用点未绑定已验证输入：{old!r}")
+            identity = identity_map[old]
+            for field, value in identity.items():
+                if field in hit and hit[field] != value:
+                    raise LedgerError(f"引用点身份与输入不一致：{old} 的 {field}")
+            hit["file"] = path_map[old]
+            hit.update(identity)
+    rebound["rebound_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return rebound
+
+
 def _cmd_extract(args) -> int:
     files = [Path(p) for p in args.files]
     if not files:
@@ -1368,11 +1447,30 @@ def _cmd_extract(args) -> int:
     if missing:
         print(f"extract：输入不存在 {missing}", file=sys.stderr)
         return 2
-    led = build_ledger(files)
+    package_root = Path(args.package_root) if args.package_root else None
+    led = build_ledger(files, package_root=package_root)
     out = Path(args.out) if args.out else ROOT / L.LEDGER_DEFAULT_REL
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes((json.dumps(led, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
     print(f"台账已产出：{out} ｜ 引用 {led['count']} 枚 ｜ 输入 {len(files)} 件")
+    return 0
+
+
+def _cmd_rebind(args) -> int:
+    led_path = Path(args.ledger)
+    if not led_path.is_file():
+        print(f"rebind：台账不存在：{led_path}", file=sys.stderr)
+        return 2
+    try:
+        led = json.loads(led_path.read_text(encoding="utf-8"))
+        rebound = rebind_ledger(led, Path(args.root))
+    except (LedgerError, OSError, ValueError, TypeError) as exc:
+        print(f"rebind FAIL（未写入）：{exc}", file=sys.stderr)
+        return 2
+    out = Path(args.out) if args.out else led_path.with_name(led_path.stem + ".rebound.json")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes((json.dumps(rebound, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    print(f"台账已重绑定：{out} ｜ 输入 {len(rebound['inputs'])} 件 ｜ 内容身份逐件通过")
     return 0
 
 
@@ -1457,6 +1555,11 @@ def main(argv: list[str]) -> int:
     e = sub.add_parser("extract", help="从文本抽取引用并产出台账")
     e.add_argument("files", nargs="+")
     e.add_argument("--out")
+    e.add_argument("--package-root", help="生成可搬迁台账：记录包内相对路径与内容身份")
+    b = sub.add_parser("rebind", help="按内容身份把可搬迁台账显式重绑到新包根")
+    b.add_argument("ledger")
+    b.add_argument("--root", required=True)
+    b.add_argument("--out")
     v = sub.add_parser("verify", help="对台账施加 L1—L4 判据")
     v.add_argument("ledger")
     v.add_argument("--index")
@@ -1468,6 +1571,8 @@ def main(argv: list[str]) -> int:
     try:
         if args.cmd == "extract":
             return _cmd_extract(args)
+        if args.cmd == "rebind":
+            return _cmd_rebind(args)
         if args.cmd == "verify":
             return _cmd_verify(args)
     except LedgerError as exc:

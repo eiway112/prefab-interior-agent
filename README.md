@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo.png" width="150" alt="装配式装修智能体技能合集">
+  <img src="程序文件/assets/logo.png" width="150" alt="装配式装修智能体技能合集">
   <h1>装配式装修智能体技能合集</h1>
   <p>把一个垂直领域的专家判据，做成智能体可加载、可审计、可复用的知识资产</p>
   <p>
@@ -67,8 +67,8 @@ flowchart TD
 ```sh
 git clone https://github.com/eiway112/prefab-interior-agent.git
 cd prefab-interior-agent
-python tools/install.py                              # 装到 ~/.qoder/skills，--target 可改目录
-python tools/smoke_test.py --target ~/.qoder/skills  # 自检：15 技能 + 8 份治理文件
+python 程序文件/tools/install.py                              # 装到 ~/.qoder/skills，--target 可改目录
+python 程序文件/tools/smoke_test.py --target ~/.qoder/skills  # 自检：15 技能 + 8 份治理文件
 ```
 
 重启智能体宿主，直接提问。第一句建议问「酒店客房整体卫浴，SMC、彩钢板、瓷砖饰面三条路线怎么选？」——这条能拿到完整的选型对比与条文级依据；想看它怎么处理隔声类问题，先读 [`examples/01`](examples/01-partition-wall-verification.md)。需要 Python 3.10+；引用核验工具另需安装 `markdown-it-py==4.0.0`（见运行环境）。
@@ -90,13 +90,13 @@ python tools/smoke_test.py --target ~/.qoder/skills  # 自检：15 技能 + 8 �
 |---|---|---|
 | 技能 | 15 个（六大部品系统 + 计算/协同/验收/复核专项） | [技能矩阵](#技能矩阵15-个) |
 | 作答纪律 | 定值先答不抛回；对外提问 ≤3 个（每个写明改变什么结论）；不可定量时只降数值不拒答；面向甲方不出现内部编号与路由码 | 各技能 `SKILL.md`「应答原则」 |
-| 加载形态 | 通用 `SKILL.md` 约定（YAML frontmatter ＋ Markdown 正文），不绑定单一平台 | 各技能目录 |
+| 加载形态 | 通用 `SKILL.md` 约定（YAML frontmatter ＋ Markdown 正文）；宿主支持范围见下文 | 各技能目录 |
 | 治理文件 | 8 份（标准索引、接口契约、红线注册表、术语表、数据分级、变更治理等） | `skills/shared/` |
 | 标准收录 | 93 条（现读），逐条带效力状态与核验状态 | [`skills/standards-index.md`](skills/standards-index.md) |
-| 随包文件 | 106 个 | [公开面边界](#公开面边界随包--不随包) |
-| 可跑测试 | 111 例，纯标准库，装完即可复跑 | [质量与测试](#质量与测试) |
+| 随包文件 | 108 个 | [公开面边界](#公开面边界随包--不随包) |
+| 可跑检查 | 安装自检＋能力级诊断；数量以随包测试现读为准 | [质量与测试](#质量与测试) |
 | CI | Ubuntu／Windows × Python 3.10／3.12，每次 push 实跑 | `.github/workflows/smoke.yml` |
-| 运行依赖 | 技能文本与 ACE 无第三方依赖；Markdown 引用核验需 markdown-it-py | [运行环境](#运行环境) |
+| 运行依赖 | 基础运行零第三方依赖；Markdown 引用核验需 markdown-it-py，政府体系 PDF 取证需 PyMuPDF | [运行环境](#运行环境) |
 | 未核项 | 公开，不藏缺口 | [`verification/`](verification/) |
 | 许可 | MIT，引用请保留版权声明 | [引用与署名](#引用与署名) |
 
@@ -270,7 +270,7 @@ flowchart LR
 
 [`verification/`](verification/) 回答三个问题：**自称核过什么、依据是什么类型、哪些还没核**。它不是宣传页，而是派生时**现读**包内索引、测试件与 CI 配置算出的机算产物——不手写数字，改了索引它跟着变，核验有缺口它看得见。未核项照原样计入摘要，不藏。
 
-真正的实跑入口在包内（结果不复制进该目录，复制会过期）：`skills/prefab-standards-reviewer/sre_regression_test.py`、`sr_ic07_compliance_test.py`、`tools/smoke_test.py`，以及每次 push 都实跑的 `.github/workflows/smoke.yml`。
+真正的实跑入口在包内（结果不复制进该目录，复制会过期）：`skills/prefab-standards-reviewer/sre_regression_test.py`、`sr_ic07_compliance_test.py`、`程序文件/tools/smoke_test.py`，以及每次 push 都实跑的 `.github/workflows/smoke.yml`。
 
 ## 换掉领域，骨架不变
 
@@ -313,17 +313,17 @@ CI 在 Ubuntu／Windows × Python 3.10／3.12 上执行：包结构自检、安�
 
 本仓是**技能分发面**：只含技能本体与治理文件镜像。开发仓的过程记录、维护脚本与校验门禁（治理登记、批凭据、各道验证脚本）不随本仓分发。
 
-| 类别 | 随包（合计 99 个文件） | 不随包 |
+| 类别 | 随包（合计 108 个文件） | 不随包 |
 |---|---|---|
-| 技能本体 | 15 个技能目录，66 个文件（含 5 个 Python 件：`ace_kernel.py`、`sre_reasoner.py`、2 件测试、验收清单导出脚本） | — |
+| 技能本体 | 15 个技能目录，73 个文件（含 5 个 Python 件：`ace_kernel.py`、`sre_reasoner.py`、2 件测试、验收清单导出脚本） | — |
 | 治理文件 | `shared/` 8 件 ＋ 根级副本 2 件（`standards-index.md`、`platform-adapter-reference.md`），共 10 个文件 | 开发仓 `治理文件/` L1 源、`台账源/`、数据分类复核清单；`change-governance.md` 的 §九／§11.2；`standards-index.md` 的 §八 |
-| 根级文件 | `README.md`、`ARCHITECTURE.md`、`LICENSE`、`CHANGELOG.md`、`.gitattributes`、`assets/logo.png`、`CONTRIBUTING.md`、`SECURITY.md`、`CODE_OF_CONDUCT.md`，共 9 个文件 | — |
-| 工程工具 | `tools/`（安装器、自检、说明）3 件；`.github/`（CI、两类 issue 模板）3 件，共 6 个文件 | 开发仓的维护脚本、批凭据脚本、发布门禁 |
+| 根级文件 | `README.md`、`ARCHITECTURE.md`、`LICENSE`、`CHANGELOG.md`、`.gitattributes`、`AGENTS.md`、`.gitignore`、`CONTRIBUTING.md`、`SECURITY.md`、`CODE_OF_CONDUCT.md`，共 10 个文件 | — |
+| 工程与 CI | `程序文件/tools/`（安装器、自检、说明）3 件；`程序文件/assets/` 1 件；`.github/`（CI、两类 issue 模板）3 件，共 7 个文件 | 开发仓的维护脚本、批凭据脚本、发布门禁 |
 | 示例输出 | `examples/`（索引页 1 件 ＋ 示例 4 件），共 5 个文件 | — |
 | 核验证据 | `verification/`（说明 1 件 ＋ 指标 1 件 ＋ 核验摘要 1 件），共 3 个文件 | 核验报告原件、标准原文与扫描件、检测报告 |
 | 证据与记录 | — | `核验成果/`、`执行记录/`、`文档目录/`（含检测报告、核验报告、产品资料原件） |
 
-**计数**：66 ＋ 10 ＋ 9 ＋ 6 ＋ 5 ＋ 3 ＝ 99 个文件；上表按文件归属划分，不重复计数。
+**计数**：73 ＋ 10 ＋ 10 ＋ 7 ＋ 5 ＋ 3 ＝ 108 个文件；上表按文件归属划分，不重复计数。
 
 **为什么这样切**：证据与记录可能含本机环境、项目信息与开发过程；维护脚本依赖开发仓的目录结构；台账是内部追溯面。正文中出现的这些路径只作**来源指认**，在本仓不可直接打开。
 
@@ -333,8 +333,8 @@ CI 在 Ubuntu／Windows × Python 3.10／3.12 上执行：包结构自检、安�
 
 ```mermaid
 flowchart LR
-    D["下载/克隆"] --> I["python tools/install.py"]
-    I --> S["python tools/smoke_test.py"]
+    D["下载/克隆"] --> I["python 程序文件/tools/install.py"]
+    I --> S["python 程序文件/tools/smoke_test.py"]
     S --> R["重启平台"]
     R --> Q["直接提问"]
 ```
@@ -344,11 +344,14 @@ flowchart LR
 ```sh
 git clone https://github.com/eiway112/prefab-interior-agent.git
 cd prefab-interior-agent
-python tools/install.py          # 可用 --target 指定其他技能目录、--dry-run 只看计划
-python tools/smoke_test.py --target ~/.qoder/skills
+python 程序文件/tools/install.py          # 可用 --target 指定其他技能目录、--dry-run 只看计划
+python 程序文件/tools/smoke_test.py --target ~/.qoder/skills
+python 程序文件/tools/smoke_test.py --target ~/.qoder/skills --capabilities
 ```
 
-更新已有安装：先 `python tools/install.py --dry-run` 看计划；安装器按受管清单与内容指纹工作，遇到本地修改默认整批拒绝，确认后 `--force` 备份替换，误改可用 `--restore` 从本机备份恢复。详见[更新与恢复](tools/README.md#更新与恢复)。
+更新已有安装：先 `python 程序文件/tools/install.py --dry-run` 看计划；安装器按受管清单与内容指纹工作，遇到本地修改默认整批拒绝，确认后 `--force` 备份替换，误改可用 `--restore` 从本机备份恢复。详见[更新与恢复](程序文件/tools/README.md#更新与恢复)。
+
+安装器支持普通独立目录、与其他合集共用技能根，以及显式选择的链接化 HOME／技能根。`shared/` 八件由本合集单一所有者管理；未受管文件即使同字节也不会静默接管。根内符号链接、目录联接和重解析点仍被拒绝。
 
 **方式 B：手动复制**
 
@@ -359,17 +362,18 @@ python tools/smoke_test.py --target ~/.qoder/skills
 3. **必装项**：请将全部技能目录连同 `skills/standards-index.md`、`skills/platform-adapter-reference.md` 与 `skills/shared/` 一并复制。技能正文硬引用 `../shared/`（红线注册表、接口契约、术语表等治理约束），缺 `shared/` 时技能仍会加载但**静默失去红线与契约约束、不报错**——只复制单个技能目录拿到的是弱化版。复制这些件不会补回开发仓的维护脚本、核验报告与执行记录。
 4. 重启你的智能体平台，直接提问即可，例如：“酒店客房整体卫浴，SMC、彩钢板、瓷砖饰面三条路线怎么选？”
 
-**装完自检**：`python tools/smoke_test.py --target <安装目录>` 应输出 PASS（15 个技能、8 份治理文件、标准索引）。缺任一件即停止，不要以「能加载」当作「完整可用」。
+**装完自检**：`python 程序文件/tools/smoke_test.py --target <安装目录>` 应输出 PASS（15 个技能、8 份治理文件、标准索引）。缺任一件即停止，不要以「能加载」当作「完整可用」。
 
 ## 目录结构
 
 ```
 prefab-interior-agent/
 ├── README.md / LICENSE / CHANGELOG.md / CONTRIBUTING.md
+├── AGENTS.md / .gitignore
 ├── SECURITY.md / CODE_OF_CONDUCT.md
-├── tools/                               ← install.py（安装）· smoke_test.py（自检）
+├── 程序文件/tools/                       ← install.py（安装）· smoke_test.py（自检）
+├── 程序文件/assets/                      ← 品牌资源
 ├── .github/                             ← CI（push / PR 跑自检）· issue 模板
-├── assets/                              ← 品牌资源
 ├── examples/                            ← 示例输出：四份真实应答样例 ＋ 索引
 ├── verification/                        ← 核验证据包：口径说明 ＋ 聚合指标 ＋ 核验摘要（派生时生成）
 └── skills/                              ← 对外引用入口：技能本体与治理文件
@@ -388,7 +392,23 @@ prefab-interior-agent/
 
 ## 运行环境
 
-技能正文为纯文本资产；ACE 内核 `ace_kernel.py` 仅用 Python 标准库。随包的标准引用核验及交付出口工具需 Python 3.10+，其中 Markdown 解析使用 `markdown-it-py`；HTML/DOCX 正文解析使用标准库。使用引用核验前执行 `python -m pip install markdown-it-py==4.0.0 mdurl==0.1.2`。缺少 Markdown 解析依赖时工具拒绝核验并提示安装，不会按零引用放行。DOCX 页眉、页脚、脚注以及 HTML 动态脚本和 CSS 布局不在正文抽取范围。开发仓维护脚本不随包。
+技能正文为纯文本资产；ACE 内核 `ace_kernel.py` 仅用 Python 标准库。随包的标准引用核验及交付出口工具需 Python 3.10+，其中 Markdown 解析使用 `markdown-it-py`；HTML/DOCX 正文解析使用标准库。使用引用核验前执行 `python -m pip install markdown-it-py==4.0.0 mdurl==0.1.2`。缺少 Markdown 解析依赖时工具拒绝核验并提示安装，不会按零引用放行。政府体系 PDF 取证另需 PyMuPDF；缺库时该通道明确降级为不可判，不影响基础读取、引用核验和渲染。DOCX 页眉、页脚、脚注以及 HTML 动态脚本和 CSS 布局不在正文抽取范围。开发仓维护脚本不随包。
+
+随包 `evidence/` 是只读证据；机器缓存默认写用户缓存目录，可用 `PREFAB_CACHE_DIR` 或工具的 `--cache-dir` 指定。`smoke_test.py --capabilities` 分别报告基础读取、引用核验、渲染、PDF 取证和缓存写入，不把可选依赖缺失写成“全部能力可用”。
+
+## 宿主支持范围
+
+| 宿主／环境 | 当前声明 | 证据边界 |
+|---|---|---|
+| Qoder Desktop／Windows | 支持 | 已实测技能加载、shared 读取、工具调用、正常输入到可检查交付物，以及失败输入明确拒判 |
+| Windows／Ubuntu × Python 3.10／3.12 | 工具链 CI 支持 | 只证明安装与随包工具回归，不证明其他智能体宿主能发现或执行技能 |
+| 其他 Qoder 宿主、Codex、原生 Linux、macOS、独立物理机器 | 未验证，不作支持声明 | 需在对应宿主完成同一正常任务与失败任务后才可纳入 |
+
+通用 `SKILL.md` 格式不等于所有宿主都已适配；未测宿主保持未验证，不由文件复制或 CI 通过推定。
+
+## 可搬迁台账
+
+需要搬迁输入材料时，抽取阶段显式加入 `--package-root`，生成含包内相对路径与内容身份的可移植台账；到新位置后运行 `citation_ledger.py rebind <台账> --root <新包根> --out <新台账>`。重绑定逐件读取实际文件并校验字节数与 SHA-256；同名不同内容、缺件、路径越界和链接逃逸均拒绝，不凭文件名放行。
 
 ## 版本与迭代策略
 

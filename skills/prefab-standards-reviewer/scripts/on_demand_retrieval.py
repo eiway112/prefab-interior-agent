@@ -264,9 +264,10 @@ def result(channel, state, reason, elapsed_ms=0, detail=None, evidence=None) -> 
 # ---------------------------------------------------------------- 上下文与缓存
 
 class Ctx:
-    def __init__(self, root: Path, registry: dict):
+    def __init__(self, root: Path, registry: dict, cache_dir: Path | None = None):
         self.root = Path(root)
         self.registry = registry
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else L.cache_dir()
 
     @property
     def card_dir(self) -> Path:
@@ -282,19 +283,20 @@ def load_registry(root: Path) -> dict:
 
 
 def card_file(ctx: Ctx, sid: str) -> Path:
-    return ctx.card_dir / L.card_name(safe_id(sid))
+    return ctx.cache_dir / L.card_name(safe_id(sid))
 
 
 def find_card(ctx: Ctx, sid: str):
-    if not ctx.card_dir.exists():
-        return None, None
-    for p in sorted(ctx.card_dir.glob(L.card_glob())):
-        try:
-            d = read_json(p)
-        except Exception:
+    for directory in dict.fromkeys((ctx.cache_dir, ctx.card_dir)):
+        if not directory.exists():
             continue
-        if same_standard(d.get("standard_id", ""), sid):
-            return p, d
+        for p in sorted(directory.glob(L.card_glob())):
+            try:
+                d = read_json(p)
+            except Exception:
+                continue
+            if same_standard(d.get("standard_id", ""), sid):
+                return p, d
     return None, None
 
 
@@ -314,13 +316,13 @@ def card_state(card: dict) -> str:
     return "valid" if date.today() <= d else "stale"
 
 
-def lookup_card(root, sid: str) -> dict:
+def lookup_card(root, sid: str, cache_dir: Path | None = None) -> dict:
     """只读证据卡查询，供交付出口闸等消费侧调用；不联网、不写盘。
 
     台账里的编号常不带年号，而证据卡 standard_id 带年号；same_standard 对任一侧缺年号
     按「前缀+编号」匹配，故无需在调用侧另做归一化。
     """
-    ctx = Ctx(Path(root), {})
+    ctx = Ctx(Path(root), {}, cache_dir=cache_dir or L.cache_dir())
     p, card = find_card(ctx, sid)
     if not card:
         return {"state": "missing", "card": None, "path": None}
@@ -1293,6 +1295,12 @@ def _selftest() -> int:
     of = {"ok": True, "codes": ["GB/T 491-1987"], "ms": 1}
     r = classify_openstd("JGJ/T 398-2017", oh, ot, of)
     check("openstd JGJ 库不覆盖", r["state"] == STATE_NOT_COVERED, r)
+    offline = classify_samr("JGJ/T 398-2017", {"ok": False, "error": "offline"}, target, None)
+    timeout = classify_samr("JGJ/T 398-2017", health,
+                            {"ok": False, "error": "wall_clock_budget"}, None)
+    check("T33 离线/超时/不覆盖三态分离", offline["state"] == STATE_INDETERMINATE
+          and timeout["state"] == STATE_INDETERMINATE and r["state"] == STATE_NOT_COVERED
+          and offline["reason"] != timeout["reason"], [offline, timeout, r])
 
     # ── 图集族路由与空前缀 fail-closed（CG-20261116-004 常驻守卫）────────────────
     rctx = Ctx(Path("."), {"routes": {"GB": ["samr"], "JGJ": ["samr", "mohurd"]}})
@@ -1339,7 +1347,8 @@ def _selftest() -> int:
 
     tmp = Path(tempfile.mkdtemp())
     # 根取 tmp/skill：随包布局的 INDEX_REL 含 `../`，根若直接取 tmp 会把夹具写到 tmp 之外
-    ctx = Ctx(tmp / "skill", {"ttl_days": {"hit": 90, "miss": 7}})
+    ctx = Ctx(tmp / "skill", {"ttl_days": {"hit": 90, "miss": 7}},
+              cache_dir=tmp / "skill" / CARD_DIR_REL)
     ev = {"channel": "sd", "level": "S2", "carrier": "u", "sha256": "s", "page": "p28",
           "parsed": {"code": "JGJ/T 398-2017", "name": "装配式住宅建筑设计标准", "status": "现行",
                      "implemented_date": "2018-06-01", "doc_date": "2025-10"},
@@ -1427,7 +1436,7 @@ def _selftest() -> int:
           f4["cache"])
     stale_path = card_file(ctx, "GB 99999-2020")
     write_json(stale_path, f1)
-    lc_stale = lookup_card(ctx.root, "GB 99999-2020")
+    lc_stale = lookup_card(ctx.root, "GB 99999-2020", cache_dir=ctx.cache_dir)
     import contextlib
     import io as _io
     from unittest.mock import patch as _patch
@@ -1456,11 +1465,28 @@ def _selftest() -> int:
     write_json(pth, card)
     p2, c2 = find_card(ctx, "JGJ/T 398-2017")
     check("卡片可查", c2 is not None and card_state(c2) == "valid")
-    lc = lookup_card(ctx.root, "JGJ/T 398")
+    lc = lookup_card(ctx.root, "JGJ/T 398", cache_dir=ctx.cache_dir)
     check("lookup_card 无年号匹配", lc["state"] == "valid"
           and (lc.get("card") or {}).get("standard_id") == "JGJ/T 398-2017", lc)
-    lc2 = lookup_card(ctx.root, "GB/T 99999-2099")
+    lc2 = lookup_card(ctx.root, "GB/T 99999-2099", cache_dir=ctx.cache_dir)
     check("lookup_card 无卡", lc2["state"] == "missing" and lc2.get("card") is None, lc2)
+
+    default_ctx = Ctx(tmp / "default-skill", {})
+    check("T31 默认缓存与随包证据分离", default_ctx.cache_dir != default_ctx.card_dir
+          and default_ctx.cache_dir == L.cache_dir(), default_ctx.cache_dir)
+    cache_ctx = Ctx(tmp / "readonly-skill", {"routes": {"JGJ": ["gov:sd"]}},
+                    cache_dir=tmp / "writable-cache")
+    cache_buf = _io.StringIO()
+    with _patch.object(sys.modules[__name__], "run_channels",
+                       return_value=([result("gov:sd", STATE_HIT, "row_found", 10, evidence=ev)], 1.0)), \
+            contextlib.redirect_stdout(cache_buf):
+        cache_rc = cmd_retrieve(cache_ctx, "JGJ/T 398-2017", None, None, 120, True, True, False, True)
+    cache_out = json.loads(cache_buf.getvalue())
+    cache_path = Path(cache_out["card"])
+    check("T31 只读安装写独立缓存", cache_rc == 0 and cache_path.is_relative_to(cache_ctx.cache_dir)
+          and cache_path.is_file() and not cache_ctx.card_dir.exists(), cache_out)
+    check("T31 缓存查询与写入同源", lookup_card(cache_ctx.root, "JGJ/T 398",
+          cache_dir=cache_ctx.cache_dir)["state"] == "valid", cache_out)
 
     (ctx.root / INDEX_REL).parent.mkdir(parents=True, exist_ok=True)
     (ctx.root / INDEX_REL).write_text(
@@ -1509,7 +1535,8 @@ def _selftest() -> int:
         "routes": {"GB": ["samr", "openstd"]},
         "channels": {"samr": {"endpoint": "https://example.invalid/{q}",
                               "health_control": "GB/T 9999-2000"}},
-        "budgets": {"default": {"socket_s": 8, "wall_s": 1}, "retry_attempts": 1}})
+        "budgets": {"default": {"socket_s": 8, "wall_s": 1}, "retry_attempts": 1}},
+        cache_dir=tmp / "f07-cache")
     with _patch.object(time, "perf_counter", return_value=100.0):
         zero_override = channel_budget(f07_ctx, "samr", 0)
     check("T21 零覆盖值不退化为默认档", zero_override.deadline == 100.0,
@@ -1630,6 +1657,18 @@ def _selftest() -> int:
     finally:
         srv.shutdown()
 
+    pdf_body = b"%PDF-synthetic"
+    missing_ctx = Ctx(tmp / "skill", {"channels": {"gov_compilation": {"sources": [{
+        "id": "missing-fitz", "name": "合成 PDF", "url": "https://example.invalid/a.pdf",
+        "bytes": len(pdf_body), "sha256": hashlib.sha256(pdf_body).hexdigest()}]}}})
+    class _PDFBudget:
+        def call(self, *args):
+            return {"ok": True, "status": 200, "body": pdf_body, "ms": 1, "error": None}
+    with _patch.dict(sys.modules, {"fitz": None}):
+        missing_rs = probe_gov_compilation(missing_ctx, "JGJ/T 398-2017", _PDFBudget())
+    check("T32 缺 PyMuPDF 明确降级", missing_rs[0]["state"] == STATE_INDETERMINATE
+          and missing_rs[0]["reason"] == "pymupdf_missing", missing_rs)
+
     bctx = Ctx(tmp / "skill", {"budgets": {
         "default": {"socket_s": 8, "wall_s": 12},
         "gov_compilation": {"socket_s": 20, "wall_s": 35},
@@ -1677,6 +1716,7 @@ def main(argv: list[str]) -> int:
             pass
     ap = argparse.ArgumentParser(description="L-RKL 按需取真引擎：证据卡缓存 + 通道四态")
     ap.add_argument("--root", default=str(ROOT_DEFAULT), help="项目根目录（默认本文件上一级）")
+    ap.add_argument("--cache-dir", type=Path, help="可写缓存目录（默认用户缓存；不写随包 evidence）")
     ap.add_argument("--selftest", action="store_true", help="离线负向注入自证，不联网")
     sub = ap.add_subparsers(dest="cmd")
 
@@ -1718,7 +1758,7 @@ def main(argv: list[str]) -> int:
     except Exception as exc:
         print(f"注册表读取失败：{root / REGISTRY_REL} :: {exc}", file=sys.stderr)
         return 2
-    ctx = Ctx(root, registry)
+    ctx = Ctx(root, registry, cache_dir=args.cache_dir or L.cache_dir())
     if args.cmd == "query":
         return cmd_query(ctx, args.standard_id)
     if args.cmd == "retrieve":

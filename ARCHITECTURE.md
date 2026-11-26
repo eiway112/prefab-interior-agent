@@ -9,7 +9,7 @@
 | 分发面（本仓） | GitHub `prefab-interior-agent` | 技能本体、治理文件、安装与自检工具；只读使用 |
 | 开发仓（私有） | 不对外公开 | 技能源、台账、批次脚本与全量门禁；改动先落此，再派生 |
 
-`skills/` 是技能本体的根目录；`tools/install.py` 把它的内容复制到宿主技能目录。`examples/` 下的示例输出件由开发仓从各技能 `examples.md` 原样抽取生成，不是手写副本。`verification/` 同理是派生物：说明页来自模板，指标与核验摘要由派生器在发布时从索引与测试件现读计算。两层的边界与文件构成见 [README 的「公开面边界」](README.md#公开面边界随包--不随包)。
+`skills/` 是技能本体的根目录；`程序文件/tools/install.py` 把它的内容复制到宿主技能目录。`examples/` 下的示例输出件由开发仓从各技能 `examples.md` 原样抽取生成，不是手写副本。`verification/` 同理是派生物：说明页来自模板，指标与核验摘要由派生器在发布时从索引与测试件现读计算。两层的边界与文件构成见 [README 的「公开面边界」](README.md#公开面边界随包--不随包)。
 
 ## 2. 运行时结构
 
@@ -42,8 +42,8 @@ flowchart LR
 | `skills/prefab-standards-reviewer/sre_regression_test.py` | 2,253 行 | SRE 回归 | 自测 |
 | `skills/prefab-standards-reviewer/sr_ic07_compliance_test.py` | 175 行 | IC-07 合规回归 | 自测 |
 | `skills/prefab-standards-reviewer/scripts/` | 以源码现读为准 | 引用台账与核验、按需取真、交付件渲染与出口闸、答疑入口 | 回归套件在开发仓，未随包 |
-| `tools/install.py` | 以源码现读为准 | 受管更新、内容核对、备份与恢复 | 开发仓 `public_install_test.py`；CI 安装复检 |
-| `tools/smoke_test.py` | 以源码现读为准 | 包结构、引用与安装内容逐字节核对 | CI 直接运行 |
+| `程序文件/tools/install.py` | 以源码现读为准 | 受管更新、内容核对、备份与恢复 | 开发仓 `public_install_test.py`；CI 安装复检 |
+| `程序文件/tools/smoke_test.py` | 以源码现读为准 | 包结构、引用与安装内容逐字节核对 | CI 直接运行 |
 
 技能正文是 Markdown＋YAML frontmatter，不需要编译。ACE 内核、安装与自检脚本只用 Python 标准库；随包的 Markdown 引用核验需 `markdown-it-py`（安装方式见 README「运行环境」），缺该依赖时工具拒绝核验并提示安装，不按零引用放行。
 
@@ -68,7 +68,7 @@ flowchart LR
 
 | 要做什么 | 落点 | 必须同步 |
 |---|---|---|
-| 新增一个技能 | 新建技能目录＋`SKILL.md`（frontmatter 含 `name`／`description`／`version`） | 相对引用 `../shared/`；跑 `tools/smoke_test.py`；发版 |
+| 新增一个技能 | 新建技能目录＋`SKILL.md`（frontmatter 含 `name`／`description`／`version`） | 相对引用 `../shared/`；跑 `程序文件/tools/smoke_test.py`；发版 |
 | 新增一条标准 | `standards-index.md` 的登记行＋核验状态 | 技能引用只引已核验条文；未核验须标 V2 |
 | 改技能内容 | 开发仓 → 重新派生本仓 | 不要直接编辑本仓（下一次派生会覆盖） |
 | 改判据或红线 | 开发仓的变更分级与复核流程 | 本仓只承载结果，不承载流程 |

@@ -31,4 +31,4 @@ labels: 数据纠错
 ## 环境
 
 - 宿主与版本：
-- 是否已跑 `python tools/smoke_test.py`（结果）：
+- 是否已跑 `python 程序文件/tools/smoke_test.py`（结果）：

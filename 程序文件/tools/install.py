@@ -18,7 +18,7 @@ for stream in (sys.stdout, sys.stderr):
     if hasattr(stream, "reconfigure"):
         stream.reconfigure(encoding="utf-8")
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 SRC = REPO / "skills"
 ROOT_FILES = ["standards-index.md", "platform-adapter-reference.md"]
 SHARED_EXPECTED = [
@@ -26,6 +26,7 @@ SHARED_EXPECTED = [
     "interface-contracts.md", "platform-adapter-reference.md", "redlines-registry.md",
     "standards-index.md", "standards-reasoning-rules.md",
 ]
+OWNER = "prefab-interior"
 STATE = ".prefab-interior-install.json"
 LOCK = ".prefab-interior-install.lock"
 BACKUPS = ".prefab-interior-backups"
@@ -115,7 +116,7 @@ def package(src: Path) -> dict[str, bytes]:
 
 def manifest(files: dict[str, bytes]) -> dict:
     hashes = {name: digest(data) for name, data in sorted(files.items())}
-    return {"schema": 1, "package_id": digest(encode(hashes)), "files": hashes}
+    return {"schema": 1, "owner": OWNER, "package_id": digest(encode(hashes)), "files": hashes}
 
 
 def managed_path(root: Path, name: str) -> Path:
@@ -134,9 +135,11 @@ def read_state(target: Path) -> dict | None:
     if raw is None:
         return None
     value = json.loads(raw)
-    if (not isinstance(value, dict) or set(value) != {"schema", "package_id", "files"}
-            or value["schema"] != 1 or not isinstance(value["files"], dict)):
-        raise InstallError("安装清单格式无效")
+    if (not isinstance(value, dict) or not {"schema", "package_id", "files"} <= set(value)
+            or set(value) - {"schema", "package_id", "files", "owner"}
+            or value["schema"] != 1 or not isinstance(value["files"], dict)
+            or ("owner" in value and value["owner"] != OWNER)):
+        raise InstallError("安装清单格式无效或所有者不属本合集")
     for name, sha in value["files"].items():
         managed_path(target, name)
         if name == STATE or not isinstance(sha, str) or len(sha) != 64:
@@ -155,13 +158,15 @@ def changes(target: Path, files: dict[str, bytes]):
     for name in sorted(set(desired) | set(old_hashes), key=lambda n: (n == STATE, n)):
         before = file_bytes(managed_path(target, name))
         after = desired.get(name)
+        expected = old_hashes.get(name)
+        if name != STATE and before is not None and expected is None:
+            conflicts.append(name)
         if before == after:
             continue
         result[name] = (before, after)
         if name == STATE:
             continue
-        expected = old_hashes.get(name)
-        if before is not None and (expected is None or digest(before) != expected):
+        if before is not None and expected is not None and digest(before) != expected:
             conflicts.append(name)
         elif before is None and expected is not None and after is not None:
             conflicts.append(name)
@@ -170,6 +175,8 @@ def changes(target: Path, files: dict[str, bytes]):
 
 def check(target: Path, src: Path) -> list[str]:
     try:
+        src = src.expanduser().resolve(strict=False)
+        target = target.expanduser().resolve(strict=False)
         files = package(src)
         problems = []
         for name, data in files.items():
@@ -209,6 +216,7 @@ def atomic_write(path: Path, data: bytes | None):
 
 @contextmanager
 def installation_lock(target: Path):
+    target = target.expanduser().resolve(strict=False)
     safe_path(target)
     target.mkdir(parents=True, exist_ok=True)
     path = safe_path(target, LOCK)
@@ -275,10 +283,10 @@ def transaction(target: Path, edits: dict, backup_root: Path) -> Path:
 
 def install(src: Path, target: Path, *, force=False, dry=False,
             backup_root: Path | None = None) -> Path | None:
+    src = src.expanduser().resolve(strict=False)
+    target = target.expanduser().resolve(strict=False)
     safe_path(src)
     safe_path(target)
-    src = Path(os.path.abspath(src))
-    target = Path(os.path.abspath(target))
     if target == src or target in src.parents or src in target.parents:
         raise InstallError("安装目录与技能包源目录不得重叠")
     files = package(src)
@@ -313,8 +321,8 @@ def install(src: Path, target: Path, *, force=False, dry=False,
 
 
 def restore(backup: Path, target: Path, *, dry=False) -> Path | None:
+    target = target.expanduser().resolve(strict=False)
     safe_path(target)
-    target = Path(os.path.abspath(target))
     safe_path(backup)
     journal = json.loads(backup.read_bytes())
     if (not isinstance(journal, dict) or set(journal) != {"schema", "target", "files", "sha256"}

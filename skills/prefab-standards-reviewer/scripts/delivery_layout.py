@@ -14,17 +14,22 @@
     <技能>/scripts/{citation_ledger,answer_to_case,deliverable_render,
                     on_demand_retrieval,delivery_layout}.py
     <技能>/scripts/retrieval_channels.json      ← 开发仓 维护脚本/配置/标准取真通道源.json
-    <技能>/evidence/card_<safe_id>.json         ← 开发仓 核验成果/证据卡_<safe_id>.json
+    <技能>/evidence/card_<safe_id>.json         ← 开发仓 核验成果/证据卡_<safe_id>.json（随包只读证据）
     <技能>/../shared/standards-index.md         ← 随包治理八件之一（install.py 已强制在场）
+
+机器检索缓存不写技能目录；默认落用户缓存目录，可用 PREFAB_CACHE_DIR 或 --cache-dir 覆盖。
 
 公开面路径必须 ASCII（`derive_public_face.py` fail-closed），故通道源与证据卡的**交付名**
 为 ASCII；开发仓侧仍用中文原名，映射只住在 TOOL_BUNDLE 一处。
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import sys
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+CACHE_ENV = "PREFAB_CACHE_DIR"
 
 # 技能目录的识别口径＝有 SKILL.md（与 install.py 的 skills() 同判据）
 PACKAGED = SCRIPT_DIR.name == "scripts" and (SCRIPT_DIR.parent / "SKILL.md").is_file()
@@ -54,6 +59,19 @@ def card_glob() -> str:
     return f"{CARD_PREFIX}*.json"
 
 
+def cache_dir(explicit: str | Path | None = None) -> Path:
+    raw = explicit or os.environ.get(CACHE_ENV)
+    if raw:
+        return Path(raw).expanduser().absolute()
+    if sys.platform == "win32":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+        return base / "prefab-interior" / "cache"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Caches" / "prefab-interior"
+    base = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+    return base / "prefab-interior"
+
+
 def describe() -> dict:
     """现读布局，供 `--layout` 与门禁取数；不写盘、不联网。"""
     return {
@@ -64,6 +82,8 @@ def describe() -> dict:
         "card_dir_rel": CARD_DIR_REL.as_posix(),
         "card_prefix": CARD_PREFIX,
         "registry_rel": REGISTRY_REL.as_posix(),
+        "cache_dir_default": str(cache_dir()).replace("\\", "/"),
+        "cache_env": CACHE_ENV,
         "index_exists": (ROOT_DEFAULT / INDEX_REL).exists(),
         "card_dir_exists": (ROOT_DEFAULT / CARD_DIR_REL).exists(),
         "registry_exists": (ROOT_DEFAULT / REGISTRY_REL).exists(),

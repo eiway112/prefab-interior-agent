@@ -7,7 +7,7 @@
 先跑一遍自检，确认问题不是包不完整导致的：
 
 ```sh
-python tools/smoke_test.py
+python 程序文件/tools/smoke_test.py
 ```
 
 ## 数据纠错（最有价值的一类）

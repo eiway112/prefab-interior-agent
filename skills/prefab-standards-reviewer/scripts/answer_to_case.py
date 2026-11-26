@@ -1253,7 +1253,8 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--strict-standards", action="store_true",
                     help="未收录于标准索引即红（默认降黄，供开放世界答疑场景）")
     ap.add_argument("--fetch-missing", action="store_true",
-                    help=f"对无有效证据卡的索引外引用联网取真（默认关；证据卡写入 {L.CARD_DIR_REL.as_posix()}/）")
+                    help="对无有效证据卡的索引外引用联网取真（默认关；证据卡写入用户缓存，"
+                         "由 PREFAB_CACHE_DIR 或宿主默认目录解析，不改写随包 evidence/）")
     ap.add_argument("--fetch-budget", type=float, default=30.0, help="每枚取真预算秒（默认 30）")
     ap.add_argument("--fetch-total", type=float, default=120.0, help="取真总预算秒（默认 120）")
     ap.add_argument("--receipt", metavar="OUT_JSON",
