@@ -11,7 +11,7 @@
 对卡根的注入（`patch.object(answer_to_case, "CARD_ROOT", …)`）在两种布局下语义不变。
 
 随包布局的落点（由 `sync_skill_backup.py` 的 TOOL_BUNDLE 声明清单交付）：
-    <技能>/scripts/{citation_ledger,answer_to_case,deliverable_render,
+    <技能>/scripts/{citation_ledger,answer_to_case,deliverable_render,partition_workflow,
                     on_demand_retrieval,delivery_layout}.py
     <技能>/scripts/retrieval_channels.json      ← 开发仓 维护脚本/配置/标准取真通道源.json
     <技能>/evidence/card_<safe_id>.json         ← 开发仓 核验成果/证据卡_<safe_id>.json（随包只读证据）

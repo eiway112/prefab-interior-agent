@@ -2,9 +2,9 @@
   "schema": "verification-metrics/1",
   "note": "由派生器在派生时现读包内文件计算，不手工维护；不含标准原文与检测报告",
   "distribution": {
-    "files_total": 108,
+    "files_total": 109,
     "skills": 15,
-    "skill_files": 73,
+    "skill_files": 74,
     "examples": 4
   },
   "tests": {
@@ -81,7 +81,7 @@
     "combos": 4
   },
   "releases": {
-    "count": 38,
-    "latest": "v1.11.2"
+    "count": 39,
+    "latest": "v1.12.0"
   }
 }

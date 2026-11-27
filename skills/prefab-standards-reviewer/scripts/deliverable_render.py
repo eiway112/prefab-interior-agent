@@ -1886,6 +1886,8 @@ def _dx_package(body: str, title: str, digest: str) -> bytes:
 
 def render_docx(case: dict, digest: str, name: str, template: str | None = None) -> bytes:
     """prefab-deliverable/v3 → Word 件（人工可填、零第三方依赖）。三形态与 HTML 面同数据同契约。"""
+    if case.get("workflow", {}).get("rule_id") == "office-partition-w5":
+        raise ValueError("W5 工作面只走统一 HTML 渲染入口；DOCX 不得绕开复核与回灌链")
     tpl = template or case["meta"].get("default_template") or "conclusion_sheet"
     if tpl == "reply_letter":
         blocks = _dx_letter_blocks(case, digest, name)
@@ -1942,6 +1944,9 @@ def docx_tables(pkg: bytes) -> list:
 
 
 def render(case: dict, digest: str, name: str, template: str | None = None) -> str:
+    if case.get("workflow", {}).get("rule_id") == "office-partition-w5":
+        import partition_workflow as PW
+        return PW.render_workface(case, PW.ROOT)
     tpl = template or case["meta"].get("default_template") or "conclusion_sheet"
     if tpl == "reply_letter":
         return render_letter(case, digest, name)
